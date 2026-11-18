@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 enum class PhaseProgress {
+    COMPLETED,
     ACTIVE,
     PREPARED_NEXT,
     PLANNED,
@@ -68,6 +69,21 @@ data class PublicVisibilitySettings(
     val showCurrentResidence: Boolean = true,
     val showOccupation: Boolean = true,
     val showPublicActivity: Boolean = false,
+    val showNetWorth: Boolean = false,
+    val showPersonalBalance: Boolean = false,
+    val showCapitalBalance: Boolean = false,
+    val showEmployment: Boolean = true,
+    val showCompanies: Boolean = true,
+    val showPolitics: Boolean = true,
+    val showPersonalIdentity: Boolean = false,
+    val notifySalaries: Boolean = true,
+    val notifyTaxes: Boolean = true,
+    val notifyElections: Boolean = true,
+    val notifyCompanies: Boolean = true,
+    val notifyMarketplace: Boolean = true,
+    val allowFriendRequests: Boolean = true,
+    val allowDirectMessages: Boolean = true,
+    val publicProfileSearchable: Boolean = true,
 )
 
 data class HoaShellUiState(
@@ -128,19 +144,23 @@ class HoaShellViewModel : ViewModel() {
             it.copy(visibilitySettings = it.visibilitySettings.copy(showPublicActivity = enabled))
         }
     }
+
+    fun updateVisibilitySettings(transform: (PublicVisibilitySettings) -> PublicVisibilitySettings) {
+        _uiState.update { it.copy(visibilitySettings = transform(it.visibilitySettings)) }
+    }
 }
 
 private fun defaultRoadmapPhases(): List<RoadmapPhase> = listOf(
-    RoadmapPhase(1, "Phase 1 • UI Shell & Navigation", "Dark green, gold & off-white design system, adaptive 11-module navigation", PhaseProgress.ACTIVE),
-    RoadmapPhase(2, "Phase 2 • World & Geography", "African countries, states, counties & non-recycled /world/{id} hierarchy", PhaseProgress.PREPARED_NEXT),
-    RoadmapPhase(3, "Phase 3 • Server Game Clock", "48h = 1 in-game year, idempotent catch-up recovery & scheduling", PhaseProgress.PLANNED),
-    RoadmapPhase(4, "Phase 4 • Identity & Immigration", "Main + ALT characters, 16-tab profile, 10-year permits & clearances", PhaseProgress.PLANNED),
-    RoadmapPhase(5, "Phase 5 • Central Ledger & Taxes", "Double-entry banking, Personal/Capital/Campaign funds & salary liabilities", PhaseProgress.PLANNED),
-    RoadmapPhase(6, "Phase 6 • Companies & Shares", "1M shares @ 10 units, 2-for-1 splits, CEO rules & certificates", PhaseProgress.PLANNED),
-    RoadmapPhase(7, "Phase 7 • Facilities & Production", "Sector buildings, NPC workforce limits & real-input production", PhaseProgress.PLANNED),
-    RoadmapPhase(8, "Phase 8 • TSN Marketplace", "County-specific supply/demand pricing, warehouses & anti-wash controls", PhaseProgress.PLANNED),
-    RoadmapPhase(9, "Phase 9 • Government & Treasuries", "14 departments across National, State & County budgets", PhaseProgress.PLANNED),
-    RoadmapPhase(10, "Phase 10 • Parties & 3 Campaigns", "State, National & General campaign funds and secure elections", PhaseProgress.PLANNED),
-    RoadmapPhase(11, "Phase 11 • Property, Loans & NPCs", "Land, bonds, collateralized loans & grouped NPC simulation", PhaseProgress.PLANNED),
-    RoadmapPhase(12, "Phase 12 • Security & Referendum", "2FA, audit logs, anti-exploit safeguards & 200-day Era Referendum", PhaseProgress.PLANNED),
+    RoadmapPhase(1, "Update 1 • Complete World Geography", "12 African countries, 24 states, 28 counties & clean /world/{id} routes", PhaseProgress.ACTIVE),
+    RoadmapPhase(2, "Update 2 • Server Game Clock", "48h = 1 in-game year, idempotent catch-up recovery & tick logs", PhaseProgress.ACTIVE),
+    RoadmapPhase(3, "Update 3 • Identity & Immigration", "Main + ALT characters, 16-tab profile, 'User Deleted' & 10-yr permits", PhaseProgress.ACTIVE),
+    RoadmapPhase(4, "Update 4 • Central Banking Engine", "Double-entry Personal, Capital & Campaign accounts with audit logs", PhaseProgress.ACTIVE),
+    RoadmapPhase(5, "Update 5 • Employment & Tax Routing", "Hourly salaries, unpaid wage liabilities & National/State/County taxes", PhaseProgress.ACTIVE),
+    RoadmapPhase(6, "Update 6 • Companies & Equity", "1M shares @ 10 units, 2-for-1 splits, CEO >=5% rule & IPO issuance", PhaseProgress.ACTIVE),
+    RoadmapPhase(7, "Update 7 • Facilities & Production", "Sector buildings, NPC capacity caps & inventory-first output", PhaseProgress.ACTIVE),
+    RoadmapPhase(8, "Update 8 • TSN County Marketplace", "Supply/demand pricing, escrow orders, anti-wash guards & inventories", PhaseProgress.ACTIVE),
+    RoadmapPhase(9, "Update 9 • 14-Dept Government", "National, State & County budgets, tax policies & audited spend", PhaseProgress.ACTIVE),
+    RoadmapPhase(10, "Update 10 • Parties, Elections & 3 Campaigns", "State, National & General campaign budgets + single-ballot voting", PhaseProgress.ACTIVE),
+    RoadmapPhase(11, "Update 11 • Property, Loans & Bonds", "Land/real estate, liability-tracked loans & sovereign/corp bonds", PhaseProgress.ACTIVE),
+    RoadmapPhase(12, "Update 12 • Security & 200-Day Referendum", "2FA/rate-limit signals, audit logs & 60% Era Referendum retention", PhaseProgress.ACTIVE),
 )

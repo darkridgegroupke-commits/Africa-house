@@ -27,6 +27,9 @@ data class HoaExtendedColors(
     val forestHeader: Color,
     val onForestHeader: Color,
     val subtleDivider: Color,
+    val charcoalDeep: Color = CharcoalDeep,
+    val charcoalElevated: Color = CharcoalElevated,
+    val onCharcoalDeep: Color = OffWhiteParchment,
 )
 
 val LocalHoaColors = staticCompositionLocalOf {
@@ -37,6 +40,9 @@ val LocalHoaColors = staticCompositionLocalOf {
         forestHeader = ForestGreenDeep,
         onForestHeader = OffWhiteParchment,
         subtleDivider = ParchmentOutline,
+        charcoalDeep = CharcoalDeep,
+        charcoalElevated = CharcoalElevated,
+        onCharcoalDeep = OffWhiteParchment,
     )
 }
 

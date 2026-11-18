@@ -37,3 +37,29 @@ val DarkMutedSageText = Color(0xFFB3C4BA)
 
 val CrimsonAlertLight = Color(0xFFB3261E)
 val CrimsonAlertDark = Color(0xFFF2B8B5)
+
+// Dark Charcoal Contrast Tokens (Landing Hero, Footer & Cards)
+val CharcoalDeep = Color(0xFF1A1E1C)
+val CharcoalElevated = Color(0xFF232926)
+val CharcoalMutedText = Color(0xFFC5CEC8)
+
+// Citizen Avatar Studio Palettes (Skin, Hair, Clothing)
+val AvatarSkinDeepUmber = Color(0xFF4A2C1D)
+val AvatarSkinMahogany = Color(0xFF6F3F26)
+val AvatarSkinChestnut = Color(0xFF8D5524)
+val AvatarSkinCaramel = Color(0xFFB57B45)
+val AvatarSkinHoney = Color(0xFFD2996C)
+val AvatarSkinWarmSand = Color(0xFFE5B893)
+
+val AvatarHairObsidian = Color(0xFF171618)
+val AvatarHairEspresso = Color(0xFF3A2418)
+val AvatarHairAuburn = Color(0xFF7B3B22)
+val AvatarHairSilver = Color(0xFFC7CCD1)
+val AvatarHairSovereignGold = Color(0xFFD4AF37)
+
+val AvatarClothKenteGold = Color(0xFFC89F2B)
+val AvatarClothEmerald = Color(0xFF0D3B26)
+val AvatarClothRoyalIndigo = Color(0xFF1E3A5F)
+val AvatarClothSavannaTerracotta = Color(0xFF9C4327)
+val AvatarClothObsidianSuit = Color(0xFF212624)
+

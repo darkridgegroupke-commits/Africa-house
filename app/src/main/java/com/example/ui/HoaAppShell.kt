@@ -64,16 +64,22 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.R
 import com.example.ui.navigation.HoaDestination
 import com.example.ui.navigation.NavGroup
+import com.example.ui.screens.AfricaWorldAtlasScreen
 import com.example.ui.screens.AfricaWorldScreen
 import com.example.ui.screens.BankingScreen
+import com.example.ui.screens.CharacterCreationWizardScreen
 import com.example.ui.screens.CompaniesScreen
+import com.example.ui.screens.CountryDetailScreen
+import com.example.ui.screens.CountyDetailScreen
 import com.example.ui.screens.EconomyScreen
 import com.example.ui.screens.GovernmentScreen
 import com.example.ui.screens.HomeDashboardScreen
@@ -81,17 +87,40 @@ import com.example.ui.screens.MarketplaceScreen
 import com.example.ui.screens.NotificationsScreen
 import com.example.ui.screens.PoliticsScreen
 import com.example.ui.screens.ProfileScreen
+import com.example.ui.screens.PublicPlayerProfileScreen
 import com.example.ui.screens.SettingsScreen
+import com.example.ui.screens.StateDetailScreen
 import com.example.ui.state.HoaShellUiState
 import com.example.ui.state.HoaShellViewModel
+import com.example.ui.state.RelocationFeedback
+import com.example.ui.state.SimulationShellBindings
+import com.example.ui.state.UiState
+import com.example.ui.state.WorldAtlasSnapshot
 import com.example.ui.theme.HoaMonoStyle
 import com.example.ui.theme.LocalHoaColors
 import kotlinx.coroutines.launch
+
+data class WorldShellBindings(
+    val worldState: UiState<WorldAtlasSnapshot>,
+    val searchQuery: String,
+    val relocationFeedback: RelocationFeedback,
+    val bootstrapError: String?,
+    val userDisplayName: String?,
+    val userEmail: String? = null,
+    val onSearchQueryChange: (String) -> Unit,
+    val onSelectCountry: (Long) -> Unit,
+    val onSelectState: (Long) -> Unit,
+    val onSettleOrRelocate: (Long, Long, Long, String, String) -> Unit,
+    val onRetryBootstrap: () -> Unit,
+    val onSignOut: () -> Unit,
+)
 
 @Composable
 fun HoaAppShell(
     uiState: HoaShellUiState,
     viewModel: HoaShellViewModel,
+    worldBindings: WorldShellBindings? = null,
+    simBindings: SimulationShellBindings = SimulationShellBindings(),
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
@@ -101,7 +130,7 @@ fun HoaAppShell(
     val scope = rememberCoroutineScope()
 
     val navigateTo: (HoaDestination) -> Unit = { dest ->
-        if (dest != currentDestination) {
+        if (dest != currentDestination || backStackEntry?.destination?.route != dest.route) {
             navController.navigate(dest.route) {
                 popUpTo(navController.graph.findStartDestination().id) {
                     saveState = true
@@ -139,6 +168,8 @@ fun HoaAppShell(
                         navController = navController,
                         uiState = uiState,
                         viewModel = viewModel,
+                        worldBindings = worldBindings,
+                        simBindings = simBindings,
                         onNavigate = navigateTo,
                         showMenuButton = false,
                         showBottomBar = false,
@@ -158,6 +189,8 @@ fun HoaAppShell(
                         navController = navController,
                         uiState = uiState,
                         viewModel = viewModel,
+                        worldBindings = worldBindings,
+                        simBindings = simBindings,
                         onNavigate = navigateTo,
                         showMenuButton = false,
                         showBottomBar = false,
@@ -187,6 +220,8 @@ fun HoaAppShell(
                         navController = navController,
                         uiState = uiState,
                         viewModel = viewModel,
+                        worldBindings = worldBindings,
+                        simBindings = simBindings,
                         onNavigate = navigateTo,
                         showMenuButton = true,
                         showBottomBar = true,
@@ -207,6 +242,8 @@ private fun HoaScaffoldContent(
     navController: NavHostController,
     uiState: HoaShellUiState,
     viewModel: HoaShellViewModel,
+    worldBindings: WorldShellBindings?,
+    simBindings: SimulationShellBindings,
     onNavigate: (HoaDestination) -> Unit,
     showMenuButton: Boolean,
     showBottomBar: Boolean,
@@ -214,6 +251,20 @@ private fun HoaScaffoldContent(
     modifier: Modifier = Modifier,
 ) {
     val hoaColors = LocalHoaColors.current
+    val atlasSuccess = (worldBindings?.worldState as? UiState.Success)?.data
+    val activeCountryId = atlasSuccess?.userAccount?.activeCountryId?.takeIf { it > 0L }
+        ?: simBindings.snapshot.activeCharacter?.currentCountryId?.takeIf { it > 0L }
+        ?: 101L
+    val activeStateId = atlasSuccess?.userAccount?.activeStateId?.takeIf { it > 0L }
+        ?: simBindings.snapshot.activeCharacter?.currentStateId?.takeIf { it > 0L }
+        ?: 201L
+    val activeCountyId = atlasSuccess?.userAccount?.activeCountyId?.takeIf { it > 0L }
+        ?: simBindings.snapshot.activeCharacter?.currentCountyId?.takeIf { it > 0L }
+        ?: 301L
+    val currencyCode = atlasSuccess?.countries
+        ?.firstOrNull { it.countryId == activeCountryId }
+        ?.currencyCode
+        ?: "NGN"
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -339,49 +390,237 @@ private fun HoaScaffoldContent(
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
+            val openWizard: (Boolean) -> Unit = { asAlt ->
+                navController.navigate("character/create?asAlt=$asAlt")
+            }
+            val openPlayerProfile: (Long) -> Unit = { pid ->
+                navController.navigate("player/$pid")
+            }
+
             composable(HoaDestination.HOME.route) {
                 HomeDashboardScreen(
                     uiState = uiState,
                     onNavigate = onNavigate,
+                    worldState = worldBindings?.worldState,
+                    sim = simBindings.snapshot,
+                    onOpenPublicProfile = openPlayerProfile,
+                    onOpenCharacterWizard = openWizard,
+                )
+            }
+            composable("dashboard") {
+                HomeDashboardScreen(
+                    uiState = uiState,
+                    onNavigate = onNavigate,
+                    worldState = worldBindings?.worldState,
+                    sim = simBindings.snapshot,
+                    onOpenPublicProfile = openPlayerProfile,
+                    onOpenCharacterWizard = openWizard,
                 )
             }
             composable(HoaDestination.PROFILE.route) {
                 ProfileScreen(
                     uiState = uiState,
                     onSelectSection = viewModel::selectProfileSection,
+                    sim = simBindings.snapshot,
+                    feedback = simBindings.feedback,
+                    playerLookupResult = simBindings.playerLookupResult,
+                    actions = simBindings.actions,
+                    activeCountryId = activeCountryId,
+                    activeStateId = activeStateId,
+                    activeCountyId = activeCountyId,
+                    onOpenPublicProfile = openPlayerProfile,
+                    onOpenCharacterWizard = openWizard,
+                )
+            }
+            composable(
+                route = "player/{playerId}",
+                arguments = listOf(navArgument("playerId") { type = NavType.LongType }),
+            ) { entry ->
+                val playerId = entry.arguments?.getLong("playerId") ?: 0L
+                PublicPlayerProfileScreen(
+                    playerId = playerId,
+                    sim = simBindings.snapshot,
+                    playerLookupResult = simBindings.playerLookupResult,
+                    feedback = simBindings.feedback,
+                    actions = simBindings.actions,
+                    onBack = { navController.popBackStack() },
+                    onOpenSettings = { onNavigate(HoaDestination.SETTINGS) },
+                )
+            }
+            composable(
+                route = "character/create?asAlt={asAlt}",
+                arguments = listOf(navArgument("asAlt") { type = NavType.BoolType; defaultValue = true }),
+            ) { entry ->
+                val asAlt = entry.arguments?.getBoolean("asAlt") ?: true
+                CharacterCreationWizardScreen(
+                    sim = simBindings.snapshot,
+                    feedback = simBindings.feedback,
+                    actions = simBindings.actions,
+                    asAlt = asAlt,
+                    onCompleted = {
+                        navController.navigate(HoaDestination.HOME.route) {
+                            popUpTo(navController.graph.findStartDestination().id) { inclusive = false }
+                            launchSingleTop = true
+                        }
+                    },
+                    onCancelAlt = { navController.popBackStack() },
                 )
             }
             composable(HoaDestination.AFRICA_WORLD.route) {
-                AfricaWorldScreen()
+                if (worldBindings != null) {
+                    AfricaWorldAtlasScreen(
+                        worldState = worldBindings.worldState,
+                        searchQuery = worldBindings.searchQuery,
+                        bootstrapError = worldBindings.bootstrapError,
+                        onSearchQueryChange = worldBindings.onSearchQueryChange,
+                        onRetryBootstrap = worldBindings.onRetryBootstrap,
+                        onOpenCountry = { countryId ->
+                            worldBindings.onSelectCountry(countryId)
+                            navController.navigate("world/$countryId")
+                        },
+                        onOpenCountyDirect = { countryId, stateId, countyId ->
+                            worldBindings.onSelectCountry(countryId)
+                            worldBindings.onSelectState(stateId)
+                            navController.navigate("county/$countyId")
+                        },
+                    )
+                } else {
+                    AfricaWorldScreen()
+                }
+            }
+            composable(
+                route = "world/{countryId}",
+                arguments = listOf(navArgument("countryId") { type = NavType.LongType }),
+            ) { entry ->
+                val countryId = entry.arguments?.getLong("countryId") ?: 101L
+                if (worldBindings != null) {
+                    CountryDetailScreen(
+                        countryId = countryId,
+                        worldState = worldBindings.worldState,
+                        onSelectCountry = worldBindings.onSelectCountry,
+                        onOpenState = { stateId ->
+                            worldBindings.onSelectState(stateId)
+                            navController.navigate("state/$stateId")
+                        },
+                        onBack = { navController.popBackStack() },
+                    )
+                } else {
+                    AfricaWorldScreen()
+                }
+            }
+            composable(
+                route = "state/{stateId}",
+                arguments = listOf(navArgument("stateId") { type = NavType.LongType }),
+            ) { entry ->
+                val stateId = entry.arguments?.getLong("stateId") ?: 201L
+                if (worldBindings != null) {
+                    StateDetailScreen(
+                        stateId = stateId,
+                        worldState = worldBindings.worldState,
+                        onSelectState = worldBindings.onSelectState,
+                        onOpenCounty = { countyId ->
+                            navController.navigate("county/$countyId")
+                        },
+                        onBack = { navController.popBackStack() },
+                    )
+                } else {
+                    AfricaWorldScreen()
+                }
+            }
+            composable(
+                route = "county/{countyId}",
+                arguments = listOf(navArgument("countyId") { type = NavType.LongType }),
+            ) { entry ->
+                val countyId = entry.arguments?.getLong("countyId") ?: 301L
+                if (worldBindings != null) {
+                    CountyDetailScreen(
+                        countyId = countyId,
+                        worldState = worldBindings.worldState,
+                        relocationFeedback = worldBindings.relocationFeedback,
+                        onSettleOrRelocate = worldBindings.onSettleOrRelocate,
+                        onBack = { navController.popBackStack() },
+                        onRequestCrossBorderImmigration = { targetCountryId, targetStateId, targetCountyId ->
+                            simBindings.actions?.applyCrossBorderImmigration(
+                                targetCountryId = targetCountryId,
+                                targetStateId = targetStateId,
+                                targetCountyId = targetCountyId,
+                            )
+                            onNavigate(HoaDestination.PROFILE)
+                        },
+                    )
+                } else {
+                    AfricaWorldScreen()
+                }
             }
             composable(HoaDestination.GOVERNMENT.route) {
-                GovernmentScreen()
+                GovernmentScreen(
+                    sim = simBindings.snapshot,
+                    feedback = simBindings.feedback,
+                    actions = simBindings.actions,
+                    activeCountryId = activeCountryId,
+                    activeStateId = activeStateId,
+                    activeCountyId = activeCountyId,
+                    currencyCode = currencyCode,
+                )
             }
             composable(HoaDestination.POLITICS.route) {
                 PoliticsScreen(
                     uiState = uiState,
                     onSelectCampaignTab = viewModel::selectCampaignTab,
+                    sim = simBindings.snapshot,
+                    feedback = simBindings.feedback,
+                    actions = simBindings.actions,
+                    activeCountryId = activeCountryId,
+                    activeStateId = activeStateId,
+                    activeCountyId = activeCountyId,
+                    currencyCode = currencyCode,
                 )
             }
             composable(HoaDestination.ECONOMY.route) {
-                EconomyScreen()
+                EconomyScreen(
+                    sim = simBindings.snapshot,
+                    feedback = simBindings.feedback,
+                    actions = simBindings.actions,
+                )
             }
             composable(HoaDestination.COMPANIES.route) {
-                CompaniesScreen()
+                CompaniesScreen(
+                    sim = simBindings.snapshot,
+                    feedback = simBindings.feedback,
+                    actions = simBindings.actions,
+                    activeCountryId = activeCountryId,
+                    activeStateId = activeStateId,
+                    activeCountyId = activeCountyId,
+                    currencyCode = currencyCode,
+                )
             }
             composable(HoaDestination.MARKETPLACE.route) {
-                MarketplaceScreen()
+                MarketplaceScreen(
+                    sim = simBindings.snapshot,
+                    feedback = simBindings.feedback,
+                    actions = simBindings.actions,
+                    activeCountryId = activeCountryId,
+                    activeCountyId = activeCountyId,
+                    currencyCode = currencyCode,
+                )
             }
             composable(HoaDestination.BANKING.route) {
                 BankingScreen(
                     uiState = uiState,
                     onSelectAccountCategory = viewModel::selectBankCategory,
+                    sim = simBindings.snapshot,
+                    feedback = simBindings.feedback,
+                    actions = simBindings.actions,
+                    activeCountryId = activeCountryId,
+                    activeStateId = activeStateId,
+                    activeCountyId = activeCountyId,
                 )
             }
             composable(HoaDestination.NOTIFICATIONS.route) {
                 NotificationsScreen(
                     uiState = uiState,
                     onSelectFilter = viewModel::selectNotificationFilter,
+                    sim = simBindings.snapshot,
                 )
             }
             composable(HoaDestination.SETTINGS.route) {
@@ -392,6 +631,16 @@ private fun HoaScaffoldContent(
                     onToggleResidence = viewModel::toggleVisibilityResidence,
                     onToggleOccupation = viewModel::toggleVisibilityOccupation,
                     onToggleActivity = viewModel::toggleVisibilityActivity,
+                    onUpdateVisibilitySettings = viewModel::updateVisibilitySettings,
+                    sim = simBindings.snapshot,
+                    feedback = simBindings.feedback,
+                    actions = simBindings.actions,
+                    userAccount = atlasSuccess?.userAccount,
+                    userDisplayName = worldBindings?.userDisplayName,
+                    userEmail = worldBindings?.userEmail,
+                    onOpenCharacterWizard = openWizard,
+                    onOpenPlayerProfile = openPlayerProfile,
+                    onSignOut = worldBindings?.onSignOut,
                 )
             }
         }
@@ -442,7 +691,7 @@ private fun HoaDrawerMenuContent(
                         border = BorderStroke(1.dp, hoaColors.goldAccent.copy(alpha = 0.7f)),
                     ) {
                         Text(
-                            text = "PHASE 1 • UI SHELL",
+                            text = "UPDATES 1–12 • LIVE",
                             style = HoaMonoStyle,
                             color = hoaColors.onForestHeader,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),

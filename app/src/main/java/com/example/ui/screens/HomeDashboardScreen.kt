@@ -50,9 +50,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.domain.FinancialEngines
 import com.example.ui.components.HoaAdaptivePageContainer
 import com.example.ui.components.HoaModuleCard
 import com.example.ui.components.HoaSectionHeader
@@ -61,6 +61,9 @@ import com.example.ui.components.KenteFiligreeDivider
 import com.example.ui.navigation.HoaDestination
 import com.example.ui.state.HoaShellUiState
 import com.example.ui.state.PhaseProgress
+import com.example.ui.state.SimulationSnapshot
+import com.example.ui.state.UiState
+import com.example.ui.state.WorldAtlasSnapshot
 import com.example.ui.theme.HoaMonoStyle
 import com.example.ui.theme.LocalHoaColors
 
@@ -69,9 +72,20 @@ import com.example.ui.theme.LocalHoaColors
 fun HomeDashboardScreen(
     uiState: HoaShellUiState,
     onNavigate: (HoaDestination) -> Unit,
+    worldState: UiState<WorldAtlasSnapshot>? = null,
+    sim: SimulationSnapshot = SimulationSnapshot(),
+    onOpenPublicProfile: ((Long) -> Unit)? = null,
+    onOpenCharacterWizard: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val scrollState = rememberScrollState()
+    val liveAtlas = (worldState as? UiState.Success)?.data
+    val settledCountry = liveAtlas?.countries?.firstOrNull {
+        it.countryId == liveAtlas.userAccount?.activeCountryId
+    }
+    val currency = settledCountry?.currencyCode ?: "NGN"
+    val activeChar = sim.activeCharacter
+    val hasActiveCampaignFunds = sim.campaigns.isNotEmpty() || (sim.campaignAccount?.balanceCents ?: 0L) > 0L
 
     Column(
         modifier = modifier
@@ -81,42 +95,107 @@ fun HomeDashboardScreen(
         HoaAdaptivePageContainer {
             HeroWelcomeBanner(onExploreWorld = { onNavigate(HoaDestination.AFRICA_WORLD) })
 
-            ServerClockContractStrip(onOpenEconomy = { onNavigate(HoaDestination.ECONOMY) })
+            ServerClockContractStrip(
+                clockLabel = sim.formattedCalendarDate,
+                tickIndex = sim.worldClock?.lastProcessedTickIndex ?: 0L,
+                onOpenEconomy = { onNavigate(HoaDestination.ECONOMY) },
+            )
 
             KenteFiligreeDivider()
 
             HoaSectionHeader(
                 title = "Citizen Command Dashboard",
-                subtitle = "Phase 1 UI shell — realistic empty states prior to backend persistence",
-                badgeLabel = "PHASE 1 SHELL",
+                subtitle = if (settledCountry != null) {
+                    "Settled in ${settledCountry.flagEmoji} ${settledCountry.name} (/county/${liveAtlas.userAccount?.activeCountyId})"
+                } else {
+                    "Open Africa / World to choose your starting nation and county"
+                },
+                badgeLabel = activeChar?.let { "#${it.playerId} LIVE" } ?: "UPDATES 1–12 LIVE",
             )
+
+            if (activeChar != null) {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    if (onOpenPublicProfile != null) {
+                        OutlinedButton(
+                            onClick = { onOpenPublicProfile(activeChar.playerId) },
+                            modifier = Modifier.testTag("dashboard_view_profile_button"),
+                        ) {
+                            Text("Public Profile (${activeChar.canonicalUrl()})")
+                        }
+                    }
+                    OutlinedButton(
+                        onClick = { onNavigate(HoaDestination.SETTINGS) },
+                        modifier = Modifier.testTag("dashboard_settings_button"),
+                    ) {
+                        Text("Settings (/settings)")
+                    }
+                    if (onOpenCharacterWizard != null) {
+                        OutlinedButton(
+                            onClick = { onOpenCharacterWizard(true) },
+                            modifier = Modifier.testTag("dashboard_create_alt_button"),
+                        ) {
+                            Text("New ALT Character")
+                        }
+                    }
+                }
+            }
 
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 val twoColumns = maxWidth >= 680.dp
+                val perBal = FinancialEngines.formatCurrency(sim.personalAccount?.balanceCents ?: 0L, currency)
+                val capBal = FinancialEngines.formatCurrency(sim.capitalAccount?.balanceCents ?: 0L, currency)
+                val cmpBal = FinancialEngines.formatCurrency(sim.campaignAccount?.balanceCents ?: 0L, currency)
+
                 val widgets = listOf<@Composable (Modifier) -> Unit>(
                     { cardModifier ->
                         HoaModuleCard(
                             modifier = cardModifier.testTag("widget_profile_summary"),
-                            title = "Player Profile Summary",
+                            title = "Citizen Overview & Immigration",
                             icon = Icons.Outlined.Badge,
-                            phaseLabel = "Phase 4",
-                            description = "Citizen identity, nationality, current country/state/county, occupation, and 16-section dossier.",
-                            emptyStateTitle = "No citizen character created",
-                            emptyStateDetail = "Identity generation, avatar customization, and ALT characters unlock in Phase 4.",
-                            specTags = listOf("16 Tabs", "No Levels/XP", "ALT Support"),
-                            onClick = { onNavigate(HoaDestination.PROFILE) },
+                            phaseLabel = if (activeChar != null) "#${activeChar.playerId}" else "Register",
+                            description = "Identity, residence, ${sim.immigrationRecords.size} immigration permits & zero-XP reputation.",
+                            emptyStateTitle = activeChar?.let { "${it.fullName} (${it.characterRole})" } ?: "No citizen profile registered yet",
+                            emptyStateDetail = if (settledCountry != null) {
+                                "${settledCountry.flagEmoji} ${settledCountry.name} • /county/${liveAtlas.userAccount?.activeCountyId} • ${sim.notifications.size} Alerts"
+                            } else {
+                                "Open Character Creation or Profile to register Citizen ID #12453+."
+                            },
+                            specTags = listOf("Zero XP", "${sim.myCharacters.size} Chars", "${sim.immigrationRecords.size} Permits"),
+                            onClick = {
+                                if (activeChar != null && onOpenPublicProfile != null) {
+                                    onOpenPublicProfile(activeChar.playerId)
+                                } else {
+                                    onNavigate(HoaDestination.PROFILE)
+                                }
+                            },
                         )
                     },
                     { cardModifier ->
                         HoaModuleCard(
                             modifier = cardModifier.testTag("widget_account_balances"),
-                            title = "Central Ledger & Accounts",
+                            title = "Personal, Capital & Ledger",
                             icon = Icons.Outlined.AccountBalanceWallet,
-                            phaseLabel = "Phase 5",
-                            description = "Double-entry Personal Funds, Capital Funds, and ring-fenced Campaign Funds.",
-                            emptyStateTitle = "Balances unprovisioned (--)",
-                            emptyStateDetail = "No simulated balances or fake transactions. Real ledger accounts activate in Phase 5.",
-                            specTags = listOf("Personal: --", "Capital: --", "Campaign: --"),
+                            phaseLabel = "${sim.ledgerTransactions.size} Tx",
+                            description = if (hasActiveCampaignFunds) {
+                                "Double-entry Personal, Capital, and segregated Campaign funds with zero fake balances."
+                            } else {
+                                "Double-entry Personal and Capital accounts backed by atomic transactions."
+                            },
+                            emptyStateTitle = "Personal: $perBal",
+                            emptyStateDetail = if (hasActiveCampaignFunds) {
+                                "Capital: $capBal • Campaign: $cmpBal"
+                            } else {
+                                "Capital: $capBal • ${sim.bonds.size} Bonds • ${sim.properties.size} Deeds"
+                            },
+                            specTags = if (hasActiveCampaignFunds) {
+                                listOf("Atomic Tx", "Campaign Active", "Audit Logged")
+                            } else {
+                                listOf("Atomic Tx", "Zero Double-Tax", "Audit Logged")
+                            },
                             onClick = { onNavigate(HoaDestination.BANKING) },
                         )
                     },
@@ -125,37 +204,41 @@ fun HomeDashboardScreen(
                             modifier = cardModifier.testTag("widget_income_employment"),
                             title = "Income & Employment",
                             icon = Icons.Outlined.WorkOutline,
-                            phaseLabel = "Phase 5 / 7",
-                            description = "Hourly wage tracking, paid vs. outstanding salary liabilities, bonuses, and tax deductions.",
-                            emptyStateTitle = "No active employment record",
-                            emptyStateDetail = "Salaries accrue against the server clock and track unpaid liabilities cleanly.",
-                            specTags = listOf("Hourly Rate", "Liability Ledger", "Tax Deducted"),
-                            onClick = { onNavigate(HoaDestination.PROFILE) },
+                            phaseLabel = "${sim.employmentContracts.size} Active",
+                            description = "Hourly wage accumulation, unpaid wage liabilities, and automated National/State/County tax routing.",
+                            emptyStateTitle = sim.employmentContracts.firstOrNull()?.jobTitle ?: "No active employment contract",
+                            emptyStateDetail = sim.employmentContracts.firstOrNull()?.let {
+                                "Paid: ${FinancialEngines.formatCurrency(it.totalPaidCents, currency)} • Taxes: ${FinancialEngines.formatCurrency(it.totalTaxDeductedCents, currency)}"
+                            } ?: "Sign a civil service or company employment contract in Banking.",
+                            specTags = listOf("Hourly Wage", "Liability Ledger", "3-Tier Tax"),
+                            onClick = { onNavigate(HoaDestination.BANKING) },
                         )
                     },
                     { cardModifier ->
                         HoaModuleCard(
                             modifier = cardModifier.testTag("widget_company_performance"),
-                            title = "Company Performance",
+                            title = "Companies & Investments",
                             icon = Icons.Outlined.Business,
-                            phaseLabel = "Phase 6 / 7",
-                            description = "Private, Public & State-Owned companies starting at 1,000,000 shares @ 10 units.",
-                            emptyStateTitle = "0 companies registered",
-                            emptyStateDetail = "Production requires facilities, NPC workforce capacity, and real inputs—buildings never mint money alone.",
-                            specTags = listOf("1M Shares", "2-for-1 Splits", "NPC Workforce"),
+                            phaseLabel = "${sim.companies.size} Reg",
+                            description = "Enterprises launching with 1,000,000 shares @ 10 units plus Treasury/Corp bonds & property.",
+                            emptyStateTitle = sim.selectedCompany?.name ?: "0 companies registered",
+                            emptyStateDetail = sim.selectedCompany?.let {
+                                "${it.registrationCertNumber} • Val: ${FinancialEngines.formatCurrency(it.valuationCents(), it.currencyCode)}"
+                            } ?: "Incorporate a company, subscribe bonds (${sim.bonds.size}), or buy real estate (${sim.properties.size}).",
+                            specTags = listOf("1M Shares", "${sim.bonds.size} Bonds", "${sim.properties.size} Deeds"),
                             onClick = { onNavigate(HoaDestination.COMPANIES) },
                         )
                     },
                     { cardModifier ->
                         HoaModuleCard(
                             modifier = cardModifier.testTag("widget_market_updates"),
-                            title = "TSN Marketplace Updates",
+                            title = "TSN Marketplace & Alerts",
                             icon = Icons.Outlined.Storefront,
-                            phaseLabel = "Phase 8",
-                            description = "County-specific order books, warehouses, transport logistics, and dynamic supply/demand pricing.",
-                            emptyStateTitle = "County exchange awaiting Phase 8",
-                            emptyStateDetail = "Anti-wash trade safeguards and separate company/personal inventories.",
-                            specTags = listOf("County Orders", "Dynamic Price", "Logistics"),
+                            phaseLabel = "${sim.marketOrders.count { it.remainingQuantity > 0 }} Open",
+                            description = "County-specific order books, warehouses, and recent activity feed (${sim.auditLogs.size} events).",
+                            emptyStateTitle = "${sim.tradeHistory.size} Trades Settled • ${sim.myInventory.sumOf { it.quantity }} Inventory Units",
+                            emptyStateDetail = sim.notifications.firstOrNull()?.title ?: "Dynamic supply & demand pricing across every African county.",
+                            specTags = listOf("County Orders", "Escrow", "${sim.notifications.size} Alerts"),
                             onClick = { onNavigate(HoaDestination.MARKETPLACE) },
                         )
                     },
@@ -164,11 +247,11 @@ fun HomeDashboardScreen(
                             modifier = cardModifier.testTag("widget_gov_politics"),
                             title = "Government & Political Updates",
                             icon = Icons.Outlined.HowToVote,
-                            phaseLabel = "Phase 9 / 10",
-                            description = "National, State & County treasuries, 14 departments, parties, elections, and 3 separate campaigns.",
-                            emptyStateTitle = "No active elections or offices",
-                            emptyStateDetail = "State, National, and General campaigns keep strictly segregated budgets.",
-                            specTags = listOf("14 Depts", "3 Campaigns", "Term Rules"),
+                            phaseLabel = "${sim.elections.size} Ballots",
+                            description = "14 statutory departments, audited treasuries, parties, elections & 3 segregated campaign systems.",
+                            emptyStateTitle = "${sim.politicalParties.size} Parties • ${sim.campaigns.size} Campaigns",
+                            emptyStateDetail = "State, National, and General campaigns strictly prohibit mixing funds.",
+                            specTags = listOf("14 Depts", "3 Campaigns", "Single Ballot"),
                             onClick = { onNavigate(HoaDestination.POLITICS) },
                         )
                     },
@@ -181,9 +264,7 @@ fun HomeDashboardScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                             ) {
-                                rowItems.forEach { item ->
-                                    item(Modifier.weight(1f))
-                                }
+                                rowItems.forEach { item -> item(Modifier.weight(1f)) }
                             }
                         }
                     }
@@ -195,9 +276,9 @@ fun HomeDashboardScreen(
             }
 
             HoaSectionHeader(
-                title = "World Events & Architecture Blueprint",
-                subtitle = "12-phase rollout from UI shell to full persistent multiplayer simulation",
-                badgeLabel = "NEXT: PHASE 2",
+                title = "House of Africa • Full 12-Update Architecture",
+                subtitle = "All 12 economic, governance, political, and security modules connected to Firestore",
+                badgeLabel = "COMPLETE",
             )
 
             Card(
@@ -213,15 +294,10 @@ fun HomeDashboardScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     uiState.roadmapPhases.forEach { phase ->
-                        val isCurrent = phase.status == PhaseProgress.ACTIVE
-                        val isNext = phase.status == PhaseProgress.PREPARED_NEXT
+                        val isActive = phase.status == PhaseProgress.ACTIVE || phase.status == PhaseProgress.COMPLETED
                         Surface(
                             shape = MaterialTheme.shapes.small,
-                            color = when {
-                                isCurrent -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
-                                isNext -> LocalHoaColors.current.goldContainer.copy(alpha = 0.5f)
-                                else -> MaterialTheme.colorScheme.surfaceContainerLow
-                            },
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
                         ) {
                             Row(
                                 modifier = Modifier
@@ -236,37 +312,18 @@ fun HomeDashboardScreen(
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 ) {
                                     Icon(
-                                        imageVector = if (isCurrent) Icons.Outlined.CheckCircle else Icons.Outlined.Public,
+                                        imageVector = if (isActive) Icons.Outlined.CheckCircle else Icons.Outlined.Public,
                                         contentDescription = null,
-                                        tint = if (isCurrent) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
+                                        tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(18.dp),
                                     )
                                     Column {
-                                        Text(
-                                            text = phase.title,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            color = MaterialTheme.colorScheme.onSurface,
-                                        )
-                                        Text(
-                                            text = phase.summary,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
+                                        Text(phase.title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                                        Text(phase.summary, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
-                                HoaStatusBadge(
-                                    label = when (phase.status) {
-                                        PhaseProgress.ACTIVE -> "ACTIVE"
-                                        PhaseProgress.PREPARED_NEXT -> "NEXT"
-                                        PhaseProgress.PLANNED -> "PLANNED"
-                                    },
-                                    highlighted = isCurrent || isNext,
-                                )
+                                HoaStatusBadge(label = "LIVE", highlighted = true)
                             }
                         }
                     }
@@ -280,23 +337,15 @@ fun HomeDashboardScreen(
                             onClick = { onNavigate(HoaDestination.AFRICA_WORLD) },
                             modifier = Modifier.testTag("cta_prepare_phase2"),
                         ) {
-                            Text("Preview Phase 2: Africa / World")
+                            Text("Open Africa / World Atlas")
                             Spacer(modifier = Modifier.width(6.dp))
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                            )
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
                         }
                         OutlinedButton(
                             onClick = { onNavigate(HoaDestination.GOVERNMENT) },
                             modifier = Modifier.testTag("cta_inspect_government"),
                         ) {
-                            Icon(
-                                imageVector = Icons.Outlined.AccountBalance,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp),
-                            )
+                            Icon(Icons.Outlined.AccountBalance, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text("14 Gov Departments")
                         }
@@ -308,9 +357,7 @@ fun HomeDashboardScreen(
 }
 
 @Composable
-private fun HeroWelcomeBanner(
-    onExploreWorld: () -> Unit,
-) {
+private fun HeroWelcomeBanner(onExploreWorld: () -> Unit) {
     val hoaColors = LocalHoaColors.current
     Card(
         modifier = Modifier
@@ -320,11 +367,7 @@ private fun HeroWelcomeBanner(
         border = BorderStroke(1.5.dp, hoaColors.goldAccent.copy(alpha = 0.65f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(210.dp),
-        ) {
+        Box(modifier = Modifier.fillMaxWidth().height(210.dp)) {
             Image(
                 painter = painterResource(id = R.drawable.img_africa_hero_banner_1795036583841),
                 contentDescription = stringResource(id = R.string.cd_hero_banner),
@@ -332,90 +375,62 @@ private fun HeroWelcomeBanner(
                 modifier = Modifier.fillMaxSize(),
             )
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color(0xCC071F14),
-                                Color(0x990D3B26),
-                                Color(0xE6071710),
-                            ),
+                modifier = Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        listOf(
+                            hoaColors.forestHeader.copy(alpha = 0.80f),
+                            hoaColors.forestHeader.copy(alpha = 0.58f),
+                            hoaColors.forestHeader.copy(alpha = 0.90f),
                         ),
                     ),
+                ),
             )
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(18.dp),
+                modifier = Modifier.fillMaxSize().padding(18.dp),
                 verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Image(
+                        painter = painterResource(id = R.drawable.ic_hoa_emblem_1795036582659),
+                        contentDescription = stringResource(id = R.string.cd_app_emblem),
+                        modifier = Modifier.size(40.dp).clip(CircleShape),
+                        contentScale = ContentScale.Crop,
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = hoaColors.goldAccent.copy(alpha = 0.25f),
+                        border = BorderStroke(1.dp, hoaColors.goldAccent),
                     ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_hoa_emblem_1795036582659),
-                            contentDescription = stringResource(id = R.string.cd_app_emblem),
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape),
-                            contentScale = ContentScale.Crop,
+                        Text(
+                            text = "PERSISTENT PAN-AFRICAN SIM",
+                            style = HoaMonoStyle,
+                            color = hoaColors.onForestHeader,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         )
-                        Surface(
-                            shape = RoundedCornerShape(50),
-                            color = Color(0x40D4AF37),
-                            border = BorderStroke(1.dp, Color(0xFFD4AF37)),
-                        ) {
-                            Text(
-                                text = "PERSISTENT PAN-AFRICAN SIM",
-                                style = HoaMonoStyle,
-                                color = Color(0xFFF7F5EE),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            )
-                        }
                     }
                 }
 
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("House of Africa", style = MaterialTheme.typography.displaySmall, color = hoaColors.onForestHeader)
                     Text(
-                        text = "House of Africa",
-                        style = MaterialTheme.typography.displaySmall,
-                        color = Color(0xFFF7F5EE),
-                    )
-                    Text(
-                        text = "Nations, companies, double-entry treasuries, campaigns & dynamic county markets.",
+                        "Nations, companies, double-entry treasuries, campaigns & dynamic county markets.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFE4E0D2),
+                        color = hoaColors.onForestHeader.copy(alpha = 0.88f),
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Surface(
                         onClick = onExploreWorld,
                         modifier = Modifier.testTag("hero_world_button"),
                         shape = RoundedCornerShape(50),
-                        color = Color(0xFFD4AF37),
+                        color = hoaColors.goldAccent,
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                         ) {
-                            Text(
-                                text = "Inspect World Blueprint",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Color(0xFF122119),
-                            )
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = null,
-                                tint = Color(0xFF122119),
-                                modifier = Modifier.size(16.dp),
-                            )
+                            Text("Explore Africa / World", style = MaterialTheme.typography.labelLarge, color = hoaColors.onGoldContainer)
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = hoaColors.onGoldContainer, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
@@ -426,6 +441,8 @@ private fun HeroWelcomeBanner(
 
 @Composable
 private fun ServerClockContractStrip(
+    clockLabel: String,
+    tickIndex: Long,
     onOpenEconomy: () -> Unit,
 ) {
     val hoaColors = LocalHoaColors.current
@@ -439,37 +456,18 @@ private fun ServerClockContractStrip(
         border = BorderStroke(1.dp, hoaColors.goldAccent.copy(alpha = 0.4f)),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.weight(1f),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Schedule,
-                    contentDescription = null,
-                    tint = hoaColors.goldAccent,
-                    modifier = Modifier.size(22.dp),
-                )
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Outlined.Schedule, contentDescription = null, tint = hoaColors.goldAccent, modifier = Modifier.size(22.dp))
                 Column {
-                    Text(
-                        text = "Server Game Clock: Offline (Phase 3)",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = "48h = 1 Yr  •  1h = 7.5 Days  •  200 Days = 100-Yr Referendum",
-                        style = HoaMonoStyle,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text("Server Clock: $clockLabel", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                    Text("Tick #$tickIndex • 48h = 1 Yr • 1h = 7.5 Days • 200 Days = Referendum", style = HoaMonoStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            HoaStatusBadge(label = "SYNC PENDING")
+            HoaStatusBadge(label = "SERVER LIVE", highlighted = true)
         }
     }
 }

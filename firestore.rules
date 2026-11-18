@@ -1,0 +1,617 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isBoundedStringList(arr, maxCount) {
+      return arr is list &&
+             arr.size() <= maxCount &&
+             (arr.size() == 0 || (arr[0] is string && arr[0].size() >= 1 && arr[0].size() <= 120));
+    }
+
+    function isValidUserAccount(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+             data.role == 'citizen' &&
+             data.activeCountryId is int && data.activeCountryId >= 0 &&
+             data.activeStateId is int && data.activeStateId >= 0 &&
+             data.activeCountyId is int && data.activeCountyId >= 0 &&
+             (!('mainPlayerId' in data) || (data.mainPlayerId is int && data.mainPlayerId >= 0)) &&
+             (!('activePlayerId' in data) || (data.activePlayerId is int && data.activePlayerId >= 0)) &&
+             (!('username' in data) || (data.username is string && data.username.size() <= 24)) &&
+             (!('email' in data) || (data.email is string && data.email.size() <= 120)) &&
+             (!('emailVerified' in data) || (data.emailVerified is bool)) &&
+             (!('termsAcceptedAt' in data) || data.termsAcceptedAt == null || isValidTimestamp(data.termsAcceptedAt)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidRelocation(data) {
+      return data.countryId is int && data.countryId >= 100 &&
+             data.fromStateId is int && data.fromStateId >= 0 &&
+             data.fromCountyId is int && data.fromCountyId >= 0 &&
+             data.toStateId is int && data.toStateId >= 200 &&
+             data.toCountyId is int && data.toCountyId >= 300 &&
+             (data.relocationType == 'INITIAL_SETTLEMENT' || data.relocationType == 'INTERNAL_RELOCATION') &&
+             data.note is string && data.note.size() >= 1 && data.note.size() <= 200 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidCountry(data) {
+      return data.countryId is int && data.countryId >= 100 &&
+             data.worldScope == 'AFRICA' &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 80 &&
+             data.isoCode is string && data.isoCode.size() >= 2 && data.isoCode.size() <= 6 &&
+             data.flagEmoji is string && data.flagEmoji.size() >= 1 && data.flagEmoji.size() <= 16 &&
+             data.capitalCity is string && data.capitalCity.size() >= 2 && data.capitalCity.size() <= 80 &&
+             data.currencyCode is string && data.currencyCode.size() >= 3 && data.currencyCode.size() <= 6 &&
+             data.currencyName is string && data.currencyName.size() >= 2 && data.currencyName.size() <= 60 &&
+             data.parliamentName is string && data.parliamentName.size() >= 2 && data.parliamentName.size() <= 100 &&
+             data.parliamentSeats is int && data.parliamentSeats >= 1 && data.parliamentSeats <= 1000 &&
+             data.population is int && data.population >= 0 &&
+             data.infrastructureIndex is int && data.infrastructureIndex >= 0 && data.infrastructureIndex <= 100 &&
+             data.incomeTaxRatePct is number && data.incomeTaxRatePct >= 0 && data.incomeTaxRatePct <= 60 &&
+             data.corporateTaxRatePct is number && data.corporateTaxRatePct >= 0 && data.corporateTaxRatePct <= 60 &&
+             data.salesTaxRatePct is number && data.salesTaxRatePct >= 0 && data.salesTaxRatePct <= 40 &&
+             data.immigrationRenewalYears == 10 &&
+             isBoundedStringList(data.naturalResources, 12) &&
+             isBoundedStringList(data.industries, 12) &&
+             data.treasuryStatus is string && data.treasuryStatus.size() >= 2 && data.treasuryStatus.size() <= 80 &&
+             data.activePartiesCount is int && data.activePartiesCount >= 0 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidState(data) {
+      return data.stateId is int && data.stateId >= 200 &&
+             data.countryId is int && data.countryId >= 100 &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 80 &&
+             data.capitalCity is string && data.capitalCity.size() >= 2 && data.capitalCity.size() <= 80 &&
+             data.governorTitle is string && data.governorTitle.size() >= 2 && data.governorTitle.size() <= 80 &&
+             isBoundedStringList(data.departments, 14) &&
+             data.stateTaxRatePct is number && data.stateTaxRatePct >= 0 && data.stateTaxRatePct <= 30 &&
+             data.infrastructureIndex is int && data.infrastructureIndex >= 0 && data.infrastructureIndex <= 100 &&
+             data.population is int && data.population >= 0 &&
+             data.economicFocus is string && data.economicFocus.size() >= 2 && data.economicFocus.size() <= 100 &&
+             data.treasuryStatus is string && data.treasuryStatus.size() >= 2 && data.treasuryStatus.size() <= 80 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidCounty(data) {
+      return data.countyId is int && data.countyId >= 300 &&
+             data.stateId is int && data.stateId >= 200 &&
+             data.countryId is int && data.countryId >= 100 &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 80 &&
+             isBoundedStringList(data.settlements, 15) &&
+             isBoundedStringList(data.localServices, 15) &&
+             data.infrastructureIndex is int && data.infrastructureIndex >= 0 && data.infrastructureIndex <= 100 &&
+             data.population is int && data.population >= 0 &&
+             data.registeredBusinesses is int && data.registeredBusinesses >= 0 &&
+             data.marketplaceStatus is string && data.marketplaceStatus.size() >= 2 && data.marketplaceStatus.size() <= 80 &&
+             data.economicSummary is string && data.economicSummary.size() >= 2 && data.economicSummary.size() <= 120 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidWorldClock(data) {
+      return data.scope == 'WORLD' &&
+             data.eraNumber is int && data.eraNumber >= 1 &&
+             isValidTimestamp(data.eraStartTime) &&
+             isValidTimestamp(data.lastTickTime) &&
+             data.lastProcessedTickIndex is int && data.lastProcessedTickIndex >= 0 &&
+             data.totalGameDaysElapsed is number && data.totalGameDaysElapsed >= 0;
+    }
+
+    function isValidPlayer(data) {
+      return data.playerId is int && data.playerId >= 12453 &&
+             data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+             (data.characterRole == 'MAIN' || data.characterRole == 'ALT') &&
+             data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 80 &&
+             data.genderPresentation is string && data.genderPresentation.size() >= 1 && data.genderPresentation.size() <= 40 &&
+             data.dateOfBirth is string && data.dateOfBirth.size() >= 4 && data.dateOfBirth.size() <= 32 &&
+             data.nationalityCountryId is int && data.nationalityCountryId >= 100 &&
+             data.placeOfBirth is string && data.placeOfBirth.size() >= 2 && data.placeOfBirth.size() <= 80 &&
+             data.currentCountryId is int && data.currentCountryId >= 100 &&
+             data.currentStateId is int && data.currentStateId >= 200 &&
+             data.currentCountyId is int && data.currentCountyId >= 300 &&
+             data.occupation is string && data.occupation.size() >= 1 && data.occupation.size() <= 80 &&
+             data.biography is string && data.biography.size() <= 400 &&
+             data.avatarStyle is string && data.avatarStyle.size() >= 1 && data.avatarStyle.size() <= 40 &&
+             data.avatarAccentIndex is int && data.avatarAccentIndex >= 0 && data.avatarAccentIndex <= 10 &&
+             (data.accountStatus == 'ACTIVE' || data.accountStatus == 'SUSPENDED' || data.accountStatus == 'DELETED') &&
+             data.publicVisible is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidBankAccount(data) {
+      return data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+             data.ownerEntityId is string && data.ownerEntityId.size() >= 1 && data.ownerEntityId.size() <= 128 &&
+             data.accountType is string && data.accountType.size() >= 2 && data.accountType.size() <= 40 &&
+             (data.accountCategory == 'CITIZEN' || data.accountCategory == 'CAMPAIGN' || data.accountCategory == 'CORPORATE' || data.accountCategory == 'TREASURY') &&
+             data.currencyCode is string && data.currencyCode.size() >= 3 && data.currencyCode.size() <= 6 &&
+             data.balanceCents is int && data.balanceCents >= 0 &&
+             data.restricted is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidLedgerTransaction(data) {
+      return data.txRef is string && data.txRef.size() >= 4 && data.txRef.size() <= 100 &&
+             data.initiatedByUid is string && data.initiatedByUid == request.auth.uid &&
+             data.senderAccountId is string && data.senderAccountId.size() >= 1 && data.senderAccountId.size() <= 128 &&
+             data.receiverAccountId is string && data.receiverAccountId.size() >= 1 && data.receiverAccountId.size() <= 128 &&
+             data.senderAccountId != data.receiverAccountId &&
+             data.amountCents is int && data.amountCents > 0 &&
+             data.taxAmountCents is int && data.taxAmountCents >= 0 &&
+             data.txType is string && data.txType.size() >= 2 && data.txType.size() <= 50 &&
+             data.gameDay is number && data.gameDay >= 0 &&
+             data.reference is string && data.reference.size() >= 1 && data.reference.size() <= 200 &&
+             (data.status == 'SETTLED' || data.status == 'REVERSED') &&
+             data.publicAudit is bool &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidSimRecord(data) {
+      return data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+             data.scope is string && data.scope.size() >= 2 && data.scope.size() <= 40 &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    match /usernames/{usernameLower} {
+      allow get: if isSignedIn() && isValidId(usernameLower);
+      allow list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if isSignedIn() &&
+                       isValidId(usernameLower) &&
+                       usernameLower.matches('^[a-z0-9_]{3,24}$') &&
+                       incoming().keys().hasAll(['username', 'usernameLower', 'ownerUid', 'createdAt']) &&
+                       incoming().keys().hasOnly(['username', 'usernameLower', 'ownerUid', 'createdAt']) &&
+                       incoming().username is string &&
+                       incoming().username.size() >= 3 &&
+                       incoming().username.size() <= 24 &&
+                       incoming().usernameLower == usernameLower &&
+                       incoming().ownerUid == request.auth.uid &&
+                       isValidTimestamp(incoming().createdAt) &&
+                       !exists(/databases/$(database)/documents/usernames/$(usernameLower));
+      allow update, delete: if false;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll([
+                         'userId', 'displayName', 'role', 'activeCountryId',
+                         'activeStateId', 'activeCountyId', 'createdAt', 'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId', 'displayName', 'username', 'email', 'emailVerified',
+                         'termsAcceptedAt', 'role', 'activeCountryId',
+                         'activeStateId', 'activeCountyId', 'mainPlayerId',
+                         'activePlayerId', 'createdAt', 'updatedAt'
+                       ]) &&
+                       isValidUserAccount(incoming());
+      allow update: if isOwner(userId) &&
+                       isValidId(userId) &&
+                       isValidUserAccount(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().role == existing().role &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'displayName', 'username', 'email', 'emailVerified', 'termsAcceptedAt',
+                         'activeCountryId', 'activeStateId',
+                         'activeCountyId', 'mainPlayerId', 'activePlayerId', 'updatedAt'
+                       ]);
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      match /relocations/{relocationId} {
+        allow get: if isOwner(userId) && isValidId(relocationId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+                         isValidId(relocationId) &&
+                         incoming().keys().hasAll([
+                           'countryId', 'fromStateId', 'fromCountyId',
+                           'toStateId', 'toCountyId', 'relocationType', 'note', 'createdAt'
+                         ]) &&
+                         incoming().keys().hasOnly([
+                           'countryId', 'fromStateId', 'fromCountyId',
+                           'toStateId', 'toCountyId', 'relocationType', 'note', 'createdAt'
+                         ]) &&
+                         isValidRelocation(incoming()) &&
+                         exists(/databases/$(database)/documents/countries/$(string(incoming().countryId))) &&
+                         exists(/databases/$(database)/documents/states/$(string(incoming().toStateId))) &&
+                         exists(/databases/$(database)/documents/counties/$(string(incoming().toCountyId)));
+        allow update, delete: if false;
+      }
+
+      match /notifications/{notifId} {
+        allow get: if isOwner(userId) && isValidId(notifId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(notifId) &&
+                         incoming().ownerUid == request.auth.uid &&
+                         isValidTimestamp(incoming().createdAt);
+        allow update: if isOwner(userId) && isValidId(notifId) &&
+                         incoming().ownerUid == existing().ownerUid &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['readStatus']);
+        allow delete: if isOwner(userId) && isValidId(notifId);
+      }
+
+      match /privacy_security/{docId} {
+        allow get: if isOwner(userId) && isValidId(docId);
+        allow list: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidId(docId) &&
+                                 incoming().ownerUid == request.auth.uid &&
+                                 isValidTimestamp(incoming().updatedAt);
+        allow delete: if false;
+      }
+    }
+
+    match /countries/{countryId} {
+      allow get: if isSignedIn() && isValidId(countryId);
+      allow list: if isSignedIn() && resource.data.worldScope == 'AFRICA';
+      allow create: if isSignedIn() &&
+                       isValidId(countryId) &&
+                       string(incoming().countryId) == countryId &&
+                       isValidCountry(incoming());
+      allow update: if isSignedIn() &&
+                       isValidId(countryId) &&
+                       incoming().countryId == existing().countryId &&
+                       incoming().worldScope == existing().worldScope &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'incomeTaxRatePct', 'corporateTaxRatePct', 'salesTaxRatePct',
+                         'activePartiesCount', 'treasuryStatus'
+                       ]) &&
+                       isValidCountry(incoming());
+      allow delete: if isAdmin();
+    }
+
+    match /states/{stateId} {
+      allow get: if isSignedIn() && isValidId(stateId);
+      allow list: if isSignedIn() && resource.data.countryId >= 100;
+      allow create: if isSignedIn() &&
+                       isValidId(stateId) &&
+                       string(incoming().stateId) == stateId &&
+                       isValidState(incoming()) &&
+                       exists(/databases/$(database)/documents/countries/$(string(incoming().countryId)));
+      allow update, delete: if isAdmin();
+    }
+
+    match /counties/{countyId} {
+      allow get: if isSignedIn() && isValidId(countyId);
+      allow list: if isSignedIn() && resource.data.stateId >= 200;
+      allow create: if isSignedIn() &&
+                       isValidId(countyId) &&
+                       string(incoming().countyId) == countyId &&
+                       isValidCounty(incoming()) &&
+                       exists(/databases/$(database)/documents/states/$(string(incoming().stateId)));
+      allow update, delete: if isAdmin();
+    }
+
+    match /world_clock/{clockId} {
+      allow get: if isSignedIn() && isValidId(clockId);
+      allow list: if isSignedIn() && resource.data.scope == 'WORLD';
+      allow create: if isSignedIn() && clockId == 'canonical' && isValidWorldClock(incoming());
+      allow update: if isSignedIn() && clockId == 'canonical' &&
+                       isValidWorldClock(incoming()) &&
+                       incoming().eraNumber >= existing().eraNumber &&
+                       incoming().lastProcessedTickIndex >= existing().lastProcessedTickIndex;
+      allow delete: if false;
+
+      match /tick_logs/{tickKey} {
+        allow get: if isSignedIn() && isValidId(tickKey);
+        allow list: if isSignedIn() && resource.data.scope == 'CLOCK_TICK';
+        allow create: if isSignedIn() && isValidId(tickKey) &&
+                         incoming().scope == 'CLOCK_TICK' &&
+                         incoming().tickIndex is int &&
+                         isValidTimestamp(incoming().processedAt);
+        allow update, delete: if false;
+      }
+    }
+
+    match /system_counters/{counterId} {
+      allow get: if isSignedIn() && isValidId(counterId);
+      allow create: if isSignedIn() && isValidId(counterId) &&
+                       incoming().nextId is int && incoming().nextId >= 100;
+      allow update: if isSignedIn() && isValidId(counterId) &&
+                       incoming().nextId is int &&
+                       incoming().nextId > existing().nextId;
+      allow delete: if false;
+    }
+
+    match /players/{playerDocId} {
+      allow get: if isSignedIn() && isValidId(playerDocId);
+      allow list: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || resource.data.publicVisible == true);
+      allow create: if isSignedIn() && isValidId(playerDocId) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       isValidPlayer(incoming());
+      allow update: if isSignedIn() && isValidId(playerDocId) &&
+                       existing().ownerUid == request.auth.uid &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().playerId == existing().playerId &&
+                       incoming().characterRole == existing().characterRole &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidPlayer(incoming());
+      allow delete: if false;
+    }
+
+    match /immigration_records/{recordId} {
+      allow get: if isSignedIn() && isValidId(recordId) && (resource == null || existing().ownerUid == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(recordId) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       isValidTimestamp(incoming().createdAt);
+      allow update: if isSignedIn() && isValidId(recordId) &&
+                       existing().ownerUid == request.auth.uid &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       isValidTimestamp(incoming().updatedAt);
+      allow delete: if false;
+    }
+
+    match /bank_accounts/{accountId} {
+      allow get: if isSignedIn() && isValidId(accountId);
+      allow list: if isSignedIn() && (
+        resource.data.ownerUid == request.auth.uid ||
+        resource.data.accountCategory == 'TREASURY' ||
+        resource.data.accountCategory == 'CORPORATE'
+      );
+      allow create: if isSignedIn() && isValidId(accountId) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       isValidBankAccount(incoming());
+      allow update: if isSignedIn() && isValidId(accountId) &&
+                       isValidBankAccount(incoming()) &&
+                       incoming().accountType == existing().accountType &&
+                       incoming().accountCategory == existing().accountCategory &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         existing().ownerUid == request.auth.uid ||
+                         incoming().balanceCents >= existing().balanceCents ||
+                         existing().accountType == 'MARKET_ESCROW' ||
+                         (
+                           existing().accountCategory == 'TREASURY' &&
+                           exists(/databases/$(database)/documents/governments/$(existing().ownerEntityId)) &&
+                           (
+                             get(/databases/$(database)/documents/governments/$(existing().ownerEntityId)).data.leaderUid == request.auth.uid ||
+                             get(/databases/$(database)/documents/governments/$(existing().ownerEntityId)).data.leaderUid == 'CARETAKER_NPC'
+                           )
+                         )
+                       );
+      allow delete: if false;
+    }
+
+    match /ledger_transactions/{txId} {
+      allow get: if isSignedIn() && isValidId(txId);
+      allow list: if isSignedIn() && (resource.data.initiatedByUid == request.auth.uid || resource.data.publicAudit == true);
+      allow create: if isSignedIn() && isValidId(txId) && isValidLedgerTransaction(incoming());
+      allow update, delete: if false;
+    }
+
+    match /idempotency_keys/{keyId} {
+      allow get: if isSignedIn() && isValidId(keyId);
+      allow create: if isSignedIn() && isValidId(keyId) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       isValidTimestamp(incoming().createdAt);
+      allow update, delete: if false;
+    }
+
+    match /employment_contracts/{contractId} {
+      allow get: if isSignedIn() && isValidId(contractId);
+      allow list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create, update: if isSignedIn() && isValidId(contractId) &&
+                               incoming().ownerUid == request.auth.uid &&
+                               isValidSimRecord(incoming());
+      allow delete: if false;
+    }
+
+    match /companies/{companyId} {
+      allow get: if isSignedIn() && isValidId(companyId);
+      allow list: if isSignedIn() && resource.data.scope == 'COMPANY';
+      allow create: if isSignedIn() && isValidId(companyId) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().scope == 'COMPANY' &&
+                       isValidTimestamp(incoming().createdAt);
+      allow update: if isSignedIn() && isValidId(companyId) &&
+                       (existing().ownerUid == request.auth.uid || existing().ceoUid == request.auth.uid) &&
+                       incoming().companyId == existing().companyId &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+
+      match /shareholders/{holderId} {
+        allow get: if isSignedIn() && isValidId(holderId);
+        allow list: if isSignedIn() && resource.data.companyId is int;
+        allow create, update: if isSignedIn() && isValidId(holderId) && isValidTimestamp(incoming().updatedAt);
+        allow delete: if false;
+      }
+
+      match /facilities/{facilityId} {
+        allow get: if isSignedIn() && isValidId(facilityId);
+        allow list: if isSignedIn() && resource.data.companyId is int;
+        allow create, update: if isSignedIn() && isValidId(facilityId) &&
+                                 incoming().ownerUid == request.auth.uid &&
+                                 incoming().npcEmployees is int &&
+                                 incoming().maxWorkforce is int &&
+                                 incoming().npcEmployees <= incoming().maxWorkforce;
+        allow delete: if false;
+      }
+
+      match /board_resolutions/{resId} {
+        allow get: if isSignedIn() && isValidId(resId);
+        allow list: if isSignedIn() && resource.data.companyId is int;
+        allow create: if isSignedIn() && isValidId(resId) && incoming().ownerUid == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
+
+    match /market_orders/{orderId} {
+      allow get: if isSignedIn() && isValidId(orderId);
+      allow list: if isSignedIn() && resource.data.scope == 'TSN_MARKET';
+      allow create: if isSignedIn() && isValidId(orderId) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().scope == 'TSN_MARKET' &&
+                       incoming().pricePerUnitCents is int && incoming().pricePerUnitCents > 0 &&
+                       incoming().quantity is int && incoming().quantity > 0;
+      allow update: if isSignedIn() && isValidId(orderId) &&
+                       incoming().scope == 'TSN_MARKET' &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    match /inventories/{invId} {
+      allow get: if isSignedIn() && isValidId(invId) && (resource == null || existing().ownerUid == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create, update: if isSignedIn() && isValidId(invId) &&
+                               incoming().ownerUid == request.auth.uid &&
+                               incoming().quantity is int && incoming().quantity >= 0;
+      allow delete: if false;
+    }
+
+    match /trade_history/{tradeId} {
+      allow get: if isSignedIn() && isValidId(tradeId);
+      allow list: if isSignedIn() && resource.data.scope == 'TSN_TRADE';
+      allow create: if isSignedIn() && isValidId(tradeId) &&
+                       incoming().scope == 'TSN_TRADE' &&
+                       incoming().buyerEntityId != incoming().sellerEntityId &&
+                       isValidTimestamp(incoming().createdAt);
+      allow update, delete: if false;
+    }
+
+    match /governments/{govId} {
+      allow get: if isSignedIn() && isValidId(govId);
+      allow list: if isSignedIn() && resource.data.scope == 'GOVERNMENT';
+      allow create, update: if isSignedIn() && isValidId(govId) &&
+                               incoming().scope == 'GOVERNMENT' &&
+                               isValidTimestamp(incoming().updatedAt);
+      allow delete: if false;
+    }
+
+    match /government_expenditures/{expId} {
+      allow get: if isSignedIn() && isValidId(expId);
+      allow list: if isSignedIn() && resource.data.scope == 'GOV_SPEND';
+      allow create: if isSignedIn() && isValidId(expId) &&
+                       incoming().scope == 'GOV_SPEND' &&
+                       incoming().approvedByUid == request.auth.uid &&
+                       incoming().amountCents is int && incoming().amountCents > 0 &&
+                       isValidTimestamp(incoming().createdAt);
+      allow update, delete: if false;
+    }
+
+    match /political_parties/{partyId} {
+      allow get: if isSignedIn() && isValidId(partyId);
+      allow list: if isSignedIn() && resource.data.scope == 'PARTY';
+      allow create, update: if isSignedIn() && isValidId(partyId) &&
+                               incoming().scope == 'PARTY' &&
+                               incoming().leaderUid == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /campaigns/{campaignId} {
+      allow get: if isSignedIn() && isValidId(campaignId);
+      allow list: if isSignedIn() && resource.data.scope == 'CAMPAIGN';
+      allow create, update: if isSignedIn() && isValidId(campaignId) &&
+                               incoming().scope == 'CAMPAIGN' &&
+                               incoming().ownerUid == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /elections/{electionId} {
+      allow get: if isSignedIn() && isValidId(electionId);
+      allow list: if isSignedIn() && resource.data.scope == 'ELECTION';
+      allow create, update: if isSignedIn() && isValidId(electionId) && incoming().scope == 'ELECTION';
+      allow delete: if false;
+
+      match /ballots/{voterUid} {
+        allow get: if isOwner(voterUid) && isValidId(voterUid);
+        allow list: if isSignedIn() && resource.data.electionId is int;
+        allow create: if isOwner(voterUid) && isValidId(voterUid) &&
+                         incoming().voterUid == request.auth.uid &&
+                         isValidTimestamp(incoming().createdAt);
+        allow update, delete: if false;
+      }
+    }
+
+    match /properties/{propertyId} {
+      allow get: if isSignedIn() && isValidId(propertyId);
+      allow list: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || resource.data.forSale == true);
+      allow create, update: if isSignedIn() && isValidId(propertyId) && incoming().ownerUid == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /loans/{loanId} {
+      allow get: if isSignedIn() && isValidId(loanId) && (resource == null || existing().ownerUid == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create, update: if isSignedIn() && isValidId(loanId) && incoming().ownerUid == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /bonds/{bondId} {
+      allow get: if isSignedIn() && isValidId(bondId);
+      allow list: if isSignedIn() && resource.data.scope == 'BOND';
+      allow create, update: if isSignedIn() && isValidId(bondId) && incoming().scope == 'BOND';
+      allow delete: if false;
+    }
+
+    match /audit_logs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && (resource == null || existing().actorUid == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.actorUid == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(logId) &&
+                       incoming().actorUid == request.auth.uid &&
+                       isValidTimestamp(incoming().createdAt);
+      allow update, delete: if false;
+    }
+
+    match /legal_retention_records/{recId} {
+      allow get: if isSignedIn() && isValidId(recId) && (resource == null || existing().ownerUid == request.auth.uid);
+      allow list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if isSignedIn() && isValidId(recId) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       isValidTimestamp(incoming().createdAt);
+      allow update, delete: if false;
+    }
+
+    match /referendums/{eraId} {
+      allow get: if isSignedIn() && isValidId(eraId);
+      allow list: if isSignedIn() && resource.data.scope == 'REFERENDUM';
+      allow create, update: if isSignedIn() && isValidId(eraId) && incoming().scope == 'REFERENDUM';
+      allow delete: if false;
+
+      match /votes/{voterUid} {
+        allow get: if isOwner(voterUid) && isValidId(voterUid);
+        allow list: if isSignedIn() && resource.data.eraNumber is int;
+        allow create: if isOwner(voterUid) && isValidId(voterUid) &&
+                         incoming().voterUid == request.auth.uid &&
+                         isValidTimestamp(incoming().createdAt);
+        allow update, delete: if false;
+      }
+    }
+  }
+}

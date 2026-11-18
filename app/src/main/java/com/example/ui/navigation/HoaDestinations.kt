@@ -148,8 +148,12 @@ enum class HoaDestination(
     );
 
     companion object {
-        fun fromRoute(route: String?): HoaDestination =
-            entries.firstOrNull { it.route == route } ?: HOME
+        fun fromRoute(route: String?): HoaDestination = when {
+            route == null || route == "dashboard" -> HOME
+            route.startsWith("player/") || route.startsWith("character/create") -> PROFILE
+            route.startsWith("world/") || route.startsWith("state/") || route.startsWith("county/") -> AFRICA_WORLD
+            else -> entries.firstOrNull { it.route == route } ?: HOME
+        }
 
         val mobileBottomDestinations: List<HoaDestination> =
             entries.filter { it.showInMobileBottomBar }
@@ -157,9 +161,15 @@ enum class HoaDestination(
 }
 
 /**
- * Canonical non-recycled entity route builders prepared for Phase 2+ deep-linking.
+ * Canonical non-recycled entity route builders prepared for deep-linking.
  */
 object HoaEntityRoutes {
+    fun landing() = "/"
+    fun register() = "/register"
+    fun login() = "/login"
+    fun characterCreate() = "/character/create"
+    fun dashboard() = "/dashboard"
+    fun settings() = "/settings"
     fun world(countryId: Long) = "/world/$countryId"
     fun state(stateId: Long) = "/state/$stateId"
     fun county(countyId: Long) = "/county/$countyId"

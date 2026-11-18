@@ -1,0 +1,214 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Authenticated player account holding main/active residence and security metadata.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "username": { "type": "string" },
+        "email": { "type": "string" },
+        "emailVerified": { "type": "boolean" },
+        "termsAcceptedAt": { "type": "string", "format": "date-time" },
+        "role": { "type": "string", "enum": ["citizen"] },
+        "activeCountryId": { "type": "integer" },
+        "activeStateId": { "type": "integer" },
+        "activeCountyId": { "type": "integer" },
+        "mainPlayerId": { "type": "integer" },
+        "activePlayerId": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "displayName", "role", "activeCountryId", "activeStateId", "activeCountyId", "createdAt", "updatedAt"]
+    },
+    "UsernameReservation": {
+      "title": "UsernameReservation",
+      "description": "Unique lowercase username reservation keyed by /usernames/{usernameLower} preventing duplicate usernames.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "usernameLower": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["username", "usernameLower", "ownerUid", "createdAt"]
+    },
+    "InternalRelocation": {
+      "title": "InternalRelocation",
+      "description": "Immutable intra-country relocation record.",
+      "type": "object",
+      "properties": {
+        "countryId": { "type": "integer" },
+        "fromStateId": { "type": "integer" },
+        "fromCountyId": { "type": "integer" },
+        "toStateId": { "type": "integer" },
+        "toCountyId": { "type": "integer" },
+        "relocationType": { "type": "string", "enum": ["INITIAL_SETTLEMENT", "INTERNAL_RELOCATION"] },
+        "note": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["countryId", "fromStateId", "fromCountyId", "toStateId", "toCountyId", "relocationType", "note", "createdAt"]
+    },
+    "Country": {
+      "title": "Country",
+      "description": "Sovereign African nation (/world/{countryId}).",
+      "type": "object",
+      "properties": {
+        "countryId": { "type": "integer" },
+        "worldScope": { "type": "string", "enum": ["AFRICA"] },
+        "name": { "type": "string" },
+        "isoCode": { "type": "string" },
+        "flagEmoji": { "type": "string" },
+        "capitalCity": { "type": "string" },
+        "currencyCode": { "type": "string" },
+        "currencyName": { "type": "string" },
+        "parliamentName": { "type": "string" },
+        "parliamentSeats": { "type": "integer" },
+        "population": { "type": "integer" },
+        "infrastructureIndex": { "type": "integer" },
+        "incomeTaxRatePct": { "type": "number" },
+        "corporateTaxRatePct": { "type": "number" },
+        "salesTaxRatePct": { "type": "number" },
+        "immigrationRenewalYears": { "type": "integer" },
+        "naturalResources": { "type": "array" },
+        "industries": { "type": "array" },
+        "treasuryStatus": { "type": "string" },
+        "activePartiesCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["countryId", "worldScope", "name", "isoCode", "flagEmoji", "capitalCity", "currencyCode", "currencyName", "parliamentName", "parliamentSeats", "population", "infrastructureIndex", "incomeTaxRatePct", "corporateTaxRatePct", "salesTaxRatePct", "immigrationRenewalYears", "naturalResources", "industries", "treasuryStatus", "activePartiesCount", "createdAt"]
+    },
+    "StateRegion": {
+      "title": "StateRegion",
+      "description": "State or region (/state/{stateId}).",
+      "type": "object",
+      "properties": {
+        "stateId": { "type": "integer" },
+        "countryId": { "type": "integer" },
+        "name": { "type": "string" },
+        "capitalCity": { "type": "string" },
+        "governorTitle": { "type": "string" },
+        "departments": { "type": "array" },
+        "stateTaxRatePct": { "type": "number" },
+        "infrastructureIndex": { "type": "integer" },
+        "population": { "type": "integer" },
+        "economicFocus": { "type": "string" },
+        "treasuryStatus": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["stateId", "countryId", "name", "capitalCity", "governorTitle", "departments", "stateTaxRatePct", "infrastructureIndex", "population", "economicFocus", "treasuryStatus", "createdAt"]
+    },
+    "County": {
+      "title": "County",
+      "description": "County jurisdiction with settlements and TSN marketplace (/county/{countyId}).",
+      "type": "object",
+      "properties": {
+        "countyId": { "type": "integer" },
+        "stateId": { "type": "integer" },
+        "countryId": { "type": "integer" },
+        "name": { "type": "string" },
+        "settlements": { "type": "array" },
+        "localServices": { "type": "array" },
+        "infrastructureIndex": { "type": "integer" },
+        "population": { "type": "integer" },
+        "registeredBusinesses": { "type": "integer" },
+        "marketplaceStatus": { "type": "string" },
+        "economicSummary": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["countyId", "stateId", "countryId", "name", "settlements", "localServices", "infrastructureIndex", "population", "registeredBusinesses", "marketplaceStatus", "economicSummary", "createdAt"]
+    },
+    "WorldClock": {
+      "title": "WorldClock",
+      "description": "Authoritative server-controlled game clock (48 real hours = 1 in-game year).",
+      "type": "object",
+      "properties": {
+        "scope": { "type": "string", "enum": ["WORLD"] },
+        "eraNumber": { "type": "integer" },
+        "eraStartTime": { "type": "string", "format": "date-time" },
+        "lastTickTime": { "type": "string", "format": "date-time" },
+        "lastProcessedTickIndex": { "type": "integer" },
+        "totalGameDaysElapsed": { "type": "number" }
+      },
+      "required": ["scope", "eraNumber", "eraStartTime", "lastTickTime", "lastProcessedTickIndex", "totalGameDaysElapsed"]
+    },
+    "PlayerCharacter": {
+      "title": "PlayerCharacter",
+      "description": "Citizen identity (main or ALT character) with permanent unique playerId and zero XP/levels.",
+      "type": "object",
+      "properties": {
+        "playerId": { "type": "integer" },
+        "ownerUid": { "type": "string" },
+        "characterRole": { "type": "string", "enum": ["MAIN", "ALT"] },
+        "fullName": { "type": "string" },
+        "genderPresentation": { "type": "string" },
+        "dateOfBirth": { "type": "string" },
+        "nationalityCountryId": { "type": "integer" },
+        "placeOfBirth": { "type": "string" },
+        "currentCountryId": { "type": "integer" },
+        "currentStateId": { "type": "integer" },
+        "currentCountyId": { "type": "integer" },
+        "occupation": { "type": "string" },
+        "biography": { "type": "string" },
+        "avatarStyle": { "type": "string" },
+        "avatarAccentIndex": { "type": "integer" },
+        "accountStatus": { "type": "string", "enum": ["ACTIVE", "SUSPENDED", "DELETED"] },
+        "publicVisible": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["playerId", "ownerUid", "characterRole", "fullName", "genderPresentation", "dateOfBirth", "nationalityCountryId", "placeOfBirth", "currentCountryId", "currentStateId", "currentCountyId", "occupation", "biography", "avatarStyle", "avatarAccentIndex", "accountStatus", "publicVisible", "createdAt", "updatedAt"]
+    },
+    "BankAccount": {
+      "title": "BankAccount",
+      "description": "Segregated Personal, Capital, Campaign, Company, or Treasury account.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "ownerEntityId": { "type": "string" },
+        "accountType": { "type": "string" },
+        "accountCategory": { "type": "string", "enum": ["CITIZEN", "CAMPAIGN", "CORPORATE", "TREASURY"] },
+        "currencyCode": { "type": "string" },
+        "balanceCents": { "type": "integer" },
+        "restricted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "ownerEntityId", "accountType", "accountCategory", "currencyCode", "balanceCents", "restricted", "createdAt", "updatedAt"]
+    },
+    "LedgerTransaction": {
+      "title": "LedgerTransaction",
+      "description": "Immutable double-entry accounting transaction.",
+      "type": "object",
+      "properties": {
+        "txRef": { "type": "string" },
+        "initiatedByUid": { "type": "string" },
+        "senderAccountId": { "type": "string" },
+        "receiverAccountId": { "type": "string" },
+        "amountCents": { "type": "integer" },
+        "taxAmountCents": { "type": "integer" },
+        "taxTreasuryAccountId": { "type": "string" },
+        "txType": { "type": "string" },
+        "gameDay": { "type": "number" },
+        "reference": { "type": "string" },
+        "status": { "type": "string", "enum": ["SETTLED", "REVERSED"] },
+        "publicAudit": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["txRef", "initiatedByUid", "senderAccountId", "receiverAccountId", "amountCents", "taxAmountCents", "txType", "gameDay", "reference", "status", "publicAudit", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": { "$ref": "#/entities/UserAccount" }, "description": "User residence, verified username, terms consent, and active character state." },
+    "/usernames/{usernameLower}": { "schema": { "$ref": "#/entities/UsernameReservation" }, "description": "Unique immutable username registry." },
+    "/users/{userId}/relocations/{relocationId}": { "schema": { "$ref": "#/entities/InternalRelocation" }, "description": "Internal relocation log." },
+    "/countries/{countryId}": { "schema": { "$ref": "#/entities/Country" }, "description": "Sovereign African countries." },
+    "/states/{stateId}": { "schema": { "$ref": "#/entities/StateRegion" }, "description": "States and regions." },
+    "/counties/{countyId}": { "schema": { "$ref": "#/entities/County" }, "description": "Counties and local services." },
+    "/world_clock/{clockId}": { "schema": { "$ref": "#/entities/WorldClock" }, "description": "Server-controlled canonical game clock." },
+    "/players/{playerDocId}": { "schema": { "$ref": "#/entities/PlayerCharacter" }, "description": "Citizen identity records." },
+    "/bank_accounts/{accountId}": { "schema": { "$ref": "#/entities/BankAccount" }, "description": "Segregated financial accounts." },
+    "/ledger_transactions/{txId}": { "schema": { "$ref": "#/entities/LedgerTransaction" }, "description": "Immutable double-entry ledger." }
+  }
+}
