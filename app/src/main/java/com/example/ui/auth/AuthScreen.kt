@@ -443,3 +443,27 @@ fun signOutFromHouseOfAfrica(
         }
     }
 }
+
+suspend fun sendCurrentUserEmailVerification(): Result<Unit> {
+    val user = Firebase.auth.currentUser
+        ?: return Result.failure(IllegalStateException("Sign in first before requesting email verification."))
+    return try {
+        user.sendEmailVerification().await()
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Log.w("Auth", "sendEmailVerification failed: ${e.message}", e)
+        Result.failure(e)
+    }
+}
+
+suspend fun reloadCurrentUserEmailVerified(): Result<Boolean> {
+    val user = Firebase.auth.currentUser
+        ?: return Result.failure(IllegalStateException("No authenticated user to reload."))
+    return try {
+        user.reload().await()
+        Result.success(Firebase.auth.currentUser?.isEmailVerified == true)
+    } catch (e: Exception) {
+        Log.w("Auth", "user.reload() failed: ${e.message}", e)
+        Result.failure(e)
+    }
+}

@@ -19,6 +19,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.MarkEmailRead
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -53,6 +56,7 @@ import com.example.ui.auth.onGoogleSignInClicked
 import com.example.ui.components.ActionFeedbackBanner
 import com.example.ui.components.KenteFiligreeDivider
 import com.example.ui.state.ActionFeedback
+import com.example.ui.state.PendingRegistrationDraft
 import com.example.ui.theme.HoaMonoStyle
 import com.example.ui.theme.LocalHoaColors
 
@@ -62,9 +66,13 @@ fun RegistrationScreen(
     initialEmail: String = "",
     initialDisplayName: String = "",
     emailVerified: Boolean = false,
+    pendingDraft: PendingRegistrationDraft = PendingRegistrationDraft(),
     usernameAvailability: Pair<String, Boolean?>? = null,
     feedback: ActionFeedback = ActionFeedback(),
+    onDraftChange: ((PendingRegistrationDraft) -> Unit)? = null,
     onCheckUsernameAvailability: ((String) -> Unit)? = null,
+    onSendVerificationEmail: (() -> Unit)? = null,
+    onRefreshEmailVerification: (() -> Unit)? = null,
     onCompleteRegistration: ((username: String, email: String, displayName: String, emailVerified: Boolean) -> Unit)? = null,
     onBackToLanding: (() -> Unit)? = null,
     onGoToLogin: (() -> Unit)? = null,
@@ -75,29 +83,64 @@ fun RegistrationScreen(
     val credentialManager = remember(context) { CredentialManager.create(context) }
     val hoaColors = LocalHoaColors.current
 
-    var username by remember { mutableStateOf("") }
-    var email by remember(initialEmail) { mutableStateOf(initialEmail) }
-    var displayName by remember(initialDisplayName) { mutableStateOf(initialDisplayName) }
-    var acceptedTerms by remember { mutableStateOf(false) }
+    var username by remember(pendingDraft.username) { mutableStateOf(pendingDraft.username) }
+    var email by remember(initialEmail, pendingDraft.email) {
+        mutableStateOf(initialEmail.ifBlank { pendingDraft.email })
+    }
+    var displayName by remember(initialDisplayName, pendingDraft.displayName) {
+        mutableStateOf(pendingDraft.displayName.ifBlank { initialDisplayName })
+    }
+    var acceptedTerms by remember(pendingDraft.acceptedTerms) { mutableStateOf(pendingDraft.acceptedTerms) }
     var localError by remember { mutableStateOf<String?>(null) }
     var isAuthenticating by remember { mutableStateOf(false) }
-    var pendingAutoClaimAfterAuth by remember { mutableStateOf(false) }
     var lastSubmitMillis by remember { mutableLongStateOf(0L) }
-
-    // Automatically claim username if user completed Google Sign-In directly from this form
-    LaunchedEffect(isSignedIn, pendingAutoClaimAfterAuth) {
-        if (isSignedIn && pendingAutoClaimAfterAuth && onCompleteRegistration != null) {
-            pendingAutoClaimAfterAuth = false
-            val resolvedEmail = initialEmail.ifBlank { email.trim() }
-            val resolvedName = initialDisplayName.ifBlank { displayName.ifBlank { username.trim() } }
-            onCompleteRegistration(username.trim(), resolvedEmail, resolvedName, emailVerified)
-        }
-    }
 
     val usernameCheck = OnboardingEngine.validateUsername(username)
     val emailCheck = OnboardingEngine.validateEmail(email)
     val availabilityMatchesInput = usernameAvailability?.first?.equals(username.trim(), ignoreCase = true) == true
     val isUsernameAvailable = if (availabilityMatchesInput) usernameAvailability?.second else null
+
+    fun syncDraft(
+        nextUsername: String = username,
+        nextEmail: String = email,
+        nextDisplayName: String = displayName,
+        nextAcceptedTerms: Boolean = acceptedTerms,
+        nextAutoSubmit: Boolean = pendingDraft.autoSubmitAfterSignIn,
+    ) {
+        onDraftChange?.invoke(
+            PendingRegistrationDraft(
+                username = nextUsername,
+                email = nextEmail,
+                displayName = nextDisplayName,
+                acceptedTerms = nextAcceptedTerms,
+                autoSubmitAfterSignIn = nextAutoSubmit,
+            ),
+        )
+    }
+
+    // Check username availability automatically once signed in with a valid carried-over draft username,
+    // and auto-claim if the user initiated submission directly before Google Sign-In.
+    LaunchedEffect(isSignedIn, pendingDraft.username, pendingDraft.autoSubmitAfterSignIn, emailVerified) {
+        if (isSignedIn) {
+            val cleanUser = username.trim()
+            if (OnboardingEngine.validateUsername(cleanUser) is OnboardingEngine.ValidationResult.Valid) {
+                onCheckUsernameAvailability?.invoke(cleanUser)
+            }
+            if (
+                pendingDraft.autoSubmitAfterSignIn &&
+                acceptedTerms &&
+                emailVerified &&
+                OnboardingEngine.validateUsername(cleanUser) is OnboardingEngine.ValidationResult.Valid &&
+                OnboardingEngine.validateEmail(email) is OnboardingEngine.ValidationResult.Valid &&
+                onCompleteRegistration != null
+            ) {
+                syncDraft(nextAutoSubmit = false)
+                val resolvedEmail = initialEmail.ifBlank { email.trim() }
+                val resolvedName = displayName.ifBlank { initialDisplayName.ifBlank { cleanUser } }
+                onCompleteRegistration(cleanUser, resolvedEmail, resolvedName, emailVerified)
+            }
+        }
+    }
 
     Scaffold(
         modifier = modifier
@@ -140,9 +183,9 @@ fun RegistrationScreen(
                 )
                 Text(
                     text = if (isSignedIn) {
-                        "Your Google identity is verified. Reserve your unique @username and accept the simulation rules to enter character creation."
+                        "Your identity is authenticated. Reserve your unique @username and confirm email verification to enter character creation."
                     } else {
-                        "Reserve a unique @username, agree to House of Africa rules, and verify via Google Credential Manager to create your character."
+                        "Reserve a unique @username, agree to House of Africa rules, and authenticate via Google Credential Manager to create your character."
                     },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -158,14 +201,18 @@ fun RegistrationScreen(
                     Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedTextField(
                             value = email,
-                            onValueChange = { email = it; localError = null },
+                            onValueChange = {
+                                email = it
+                                localError = null
+                                syncDraft(nextEmail = it)
+                            },
                             label = { Text("Email Address") },
                             readOnly = isSignedIn && initialEmail.isNotBlank(),
                             singleLine = true,
                             isError = email.isNotBlank() && emailCheck is OnboardingEngine.ValidationResult.Invalid,
                             supportingText = {
                                 if (isSignedIn && emailVerified) {
-                                    Text("Verified via Google Identity")
+                                    Text("Verified via Firebase Authentication")
                                 } else if (email.isNotBlank() && emailCheck is OnboardingEngine.ValidationResult.Invalid) {
                                     Text(emailCheck.message)
                                 }
@@ -173,18 +220,96 @@ fun RegistrationScreen(
                             modifier = Modifier.fillMaxWidth().testTag("register_email_input"),
                         )
 
+                        if (isSignedIn) {
+                            Surface(
+                                shape = MaterialTheme.shapes.small,
+                                color = if (emailVerified) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (emailVerified) MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                                    else MaterialTheme.colorScheme.error.copy(alpha = 0.5f),
+                                ),
+                                modifier = Modifier.fillMaxWidth().testTag("register_email_verification_card"),
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = if (emailVerified) Icons.Outlined.MarkEmailRead else Icons.Outlined.Info,
+                                            contentDescription = null,
+                                            tint = if (emailVerified) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Text(
+                                            text = if (emailVerified) {
+                                                "Email Verified • Ready for Citizen Onboarding"
+                                            } else {
+                                                "Email Verification Required"
+                                            },
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                    }
+                                    if (!emailVerified) {
+                                        Text(
+                                            text = "Verify your email link via Firebase Authentication before reserving your citizen handle.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            if (onSendVerificationEmail != null) {
+                                                OutlinedButton(
+                                                    onClick = onSendVerificationEmail,
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(48.dp)
+                                                        .testTag("register_send_verification_button"),
+                                                ) {
+                                                    Text("Send Link")
+                                                }
+                                            }
+                                            if (onRefreshEmailVerification != null) {
+                                                OutlinedButton(
+                                                    onClick = onRefreshEmailVerification,
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(48.dp)
+                                                        .testTag("register_refresh_verification_button"),
+                                                ) {
+                                                    Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Refresh")
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         OutlinedTextField(
                             value = username,
                             onValueChange = { raw ->
-                                username = raw.filter { it.isLetterOrDigit() || it == '_' }.take(24)
+                                val filtered = raw.filter { it.isLetterOrDigit() || it == '_' }.take(24)
+                                username = filtered
                                 localError = null
-                                if (isSignedIn && username.length >= 3) {
-                                    onCheckUsernameAvailability?.invoke(username)
+                                syncDraft(nextUsername = filtered)
+                                if (isSignedIn && OnboardingEngine.validateUsername(filtered) is OnboardingEngine.ValidationResult.Valid) {
+                                    onCheckUsernameAvailability?.invoke(filtered)
                                 }
                             },
                             label = { Text("Unique Username (@handle)") },
                             singleLine = true,
-                            isError = username.isNotBlank() && usernameCheck is OnboardingEngine.ValidationResult.Invalid,
+                            isError = (username.isNotBlank() && usernameCheck is OnboardingEngine.ValidationResult.Invalid) ||
+                                isUsernameAvailable == false,
                             supportingText = {
                                 when {
                                     username.isNotBlank() && usernameCheck is OnboardingEngine.ValidationResult.Invalid ->
@@ -194,7 +319,7 @@ fun RegistrationScreen(
                                     isUsernameAvailable == false ->
                                         Text("@${username.lowercase()} is already claimed.", color = MaterialTheme.colorScheme.error)
                                     else ->
-                                        Text("3–24 characters: letters, numbers, underscores.")
+                                        Text("3–24 chars: letters, numbers, single internal underscores.")
                                 }
                             },
                             modifier = Modifier.fillMaxWidth().testTag("register_username_input"),
@@ -204,21 +329,22 @@ fun RegistrationScreen(
                             OutlinedButton(
                                 onClick = { onCheckUsernameAvailability(username) },
                                 enabled = usernameCheck is OnboardingEngine.ValidationResult.Valid,
-                                modifier = Modifier.testTag("register_check_username_button"),
+                                modifier = Modifier.height(48.dp).testTag("register_check_username_button"),
                             ) {
                                 Text("Check Availability")
                             }
                         }
 
-                        if (!isSignedIn) {
-                            OutlinedTextField(
-                                value = displayName,
-                                onValueChange = { displayName = it },
-                                label = { Text("Preferred Display Name (optional)") },
-                                singleLine = true,
-                                modifier = Modifier.fillMaxWidth().testTag("register_display_name_input"),
-                            )
-                        }
+                        OutlinedTextField(
+                            value = displayName,
+                            onValueChange = {
+                                displayName = it
+                                syncDraft(nextDisplayName = it)
+                            },
+                            label = { Text("Preferred Display Name (optional)") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("register_display_name_input"),
+                        )
 
                         KenteFiligreeDivider()
 
@@ -228,7 +354,11 @@ fun RegistrationScreen(
                         ) {
                             Checkbox(
                                 checked = acceptedTerms,
-                                onCheckedChange = { acceptedTerms = it; localError = null },
+                                onCheckedChange = {
+                                    acceptedTerms = it
+                                    localError = null
+                                    syncDraft(nextAcceptedTerms = it)
+                                },
                                 modifier = Modifier.testTag("register_terms_checkbox"),
                             )
                             Text(
@@ -238,20 +368,20 @@ fun RegistrationScreen(
                             )
                         }
 
-                        // Transparent auth architecture notice (password login requires Firebase Email/Password + backend verification)
                         Surface(
                             shape = MaterialTheme.shapes.small,
                             color = MaterialTheme.colorScheme.surfaceContainerLow,
                             border = BorderStroke(1.dp, hoaColors.goldAccent.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth().testTag("register_security_policy_card"),
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(10.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.Top,
                             ) {
-                                Icon(Icons.Outlined.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Outlined.Shield, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
                                 Text(
-                                    text = "Security Note: Account verification runs live via Google Credential Manager with automatic email verification & 2FA protection. Standalone password sign-up requires enabling Firebase Email/Password provider in Firebase Console.",
+                                    text = "Auth & Hashing Policy: Sign-in runs via Firebase Authentication (Google Credential Manager) with atomic /usernames uniqueness locks in Firestore and zero client password storage. To enable standalone email/password login with Firebase server-side scrypt hashing (${OnboardingEngine.MIN_PASSWORD_LENGTH}+ chars, upper/lower/digit/symbol), turn on Email/Password in Firebase Console.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -262,6 +392,7 @@ fun RegistrationScreen(
                             Surface(
                                 shape = MaterialTheme.shapes.small,
                                 color = MaterialTheme.colorScheme.errorContainer,
+                                modifier = Modifier.fillMaxWidth().testTag("register_error_banner"),
                             ) {
                                 Text(
                                     text = localError.orEmpty(),
@@ -295,6 +426,10 @@ fun RegistrationScreen(
                                     localError = "Accept Terms of Service & Fair Play Rules to continue."
                                     return@Button
                                 }
+                                if (isSignedIn && !emailVerified) {
+                                    localError = "Verify your email address first using the Verification card above."
+                                    return@Button
+                                }
                                 lastSubmitMillis = now
                                 if (isSignedIn) {
                                     onCompleteRegistration?.invoke(
@@ -305,7 +440,7 @@ fun RegistrationScreen(
                                     )
                                 } else {
                                     isAuthenticating = true
-                                    pendingAutoClaimAfterAuth = true
+                                    syncDraft(nextAutoSubmit = true)
                                     onGoogleSignInClicked(
                                         context = context,
                                         credentialManager = credentialManager,
@@ -314,13 +449,13 @@ fun RegistrationScreen(
                                         },
                                         onAuthError = { err ->
                                             isAuthenticating = false
-                                            pendingAutoClaimAfterAuth = false
+                                            syncDraft(nextAutoSubmit = false)
                                             localError = err
                                         },
                                         scope = scope,
                                         onAuthCancelled = {
                                             isAuthenticating = false
-                                            pendingAutoClaimAfterAuth = false
+                                            syncDraft(nextAutoSubmit = false)
                                         },
                                     )
                                 }

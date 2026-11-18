@@ -191,7 +191,9 @@ service cloud.firestore {
       allow list: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
       allow create: if isSignedIn() &&
                        isValidId(usernameLower) &&
-                       usernameLower.matches('^[a-z0-9_]{3,24}$') &&
+                       usernameLower.size() >= 3 &&
+                       usernameLower.size() <= 24 &&
+                       usernameLower.matches('^[a-z0-9]([a-z0-9]|_[a-z0-9])*$') &&
                        incoming().keys().hasAll(['username', 'usernameLower', 'ownerUid', 'createdAt']) &&
                        incoming().keys().hasOnly(['username', 'usernameLower', 'ownerUid', 'createdAt']) &&
                        incoming().username is string &&

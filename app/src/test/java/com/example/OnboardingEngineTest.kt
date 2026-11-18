@@ -12,9 +12,35 @@ class OnboardingEngineTest {
     fun username_validation_enforces_format_and_reserved_handles() {
         assertTrue(OnboardingEngine.validateUsername("amina_okonkwo") is OnboardingEngine.ValidationResult.Valid)
         assertTrue(OnboardingEngine.validateUsername("ab") is OnboardingEngine.ValidationResult.Invalid)
+        assertTrue(OnboardingEngine.validateUsername("_leading") is OnboardingEngine.ValidationResult.Invalid)
+        assertTrue(OnboardingEngine.validateUsername("trailing_") is OnboardingEngine.ValidationResult.Invalid)
+        assertTrue(OnboardingEngine.validateUsername("double__score") is OnboardingEngine.ValidationResult.Invalid)
         assertTrue(OnboardingEngine.validateUsername("bad-handle!") is OnboardingEngine.ValidationResult.Invalid)
         assertTrue(OnboardingEngine.validateUsername("admin") is OnboardingEngine.ValidationResult.Invalid)
+        assertTrue(OnboardingEngine.validateUsername("houseofafrica") is OnboardingEngine.ValidationResult.Invalid)
         assertTrue(OnboardingEngine.validateUsername("deleted") is OnboardingEngine.ValidationResult.Invalid)
+    }
+
+    @Test
+    fun password_strength_enforces_length_complexity_and_anti_identifier_checks() {
+        val short = OnboardingEngine.validatePasswordStrength("Ab1!", username = "amina", email = "amina@africa.org")
+        assertEquals(OnboardingEngine.PasswordStrength.WEAK, short.strength)
+        assertTrue(!short.isAcceptable)
+
+        val common = OnboardingEngine.validatePasswordStrength("Password123", username = "amina", email = "amina@africa.org")
+        assertTrue(!common.isAcceptable)
+
+        val containsUser = OnboardingEngine.validatePasswordStrength("Amina#2026Strong!", username = "amina", email = "kofi@africa.org")
+        assertTrue(!containsUser.isAcceptable)
+
+        val good = OnboardingEngine.validatePasswordStrength("Kente#2026Go", username = "amina", email = "amina@africa.org")
+        assertEquals(OnboardingEngine.PasswordStrength.GOOD, good.strength)
+        assertTrue(good.isAcceptable)
+
+        val strong = OnboardingEngine.validatePasswordStrength("Savanna!Gold#9421", username = "amina", email = "amina@africa.org")
+        assertEquals(OnboardingEngine.PasswordStrength.STRONG, strong.strength)
+        assertTrue(strong.isAcceptable)
+        assertTrue(strong.issues.isEmpty())
     }
 
     @Test

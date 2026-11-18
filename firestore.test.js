@@ -665,11 +665,27 @@ test("Username reservations enforce global uniqueness, format regex, and immutab
   // Unauthenticated reads/writes fail
   await assertFails(unauthDb.collection("usernames").doc("amina_ng").get());
 
-  // Invalid lowercase mismatch or invalid characters fail
+  // Invalid lowercase mismatch or invalid underscore placement fail
   await assertFails(
     aliceDb.collection("usernames").doc("Amina_NG").set({
       username: "Amina_NG",
       usernameLower: "Amina_NG",
+      ownerUid: ALICE_UID,
+      createdAt: now,
+    })
+  );
+  await assertFails(
+    aliceDb.collection("usernames").doc("_amina").set({
+      username: "_amina",
+      usernameLower: "_amina",
+      ownerUid: ALICE_UID,
+      createdAt: now,
+    })
+  );
+  await assertFails(
+    aliceDb.collection("usernames").doc("amina__ng").set({
+      username: "amina__ng",
+      usernameLower: "amina__ng",
       ownerUid: ALICE_UID,
       createdAt: now,
     })
@@ -697,4 +713,5 @@ test("Username reservations enforce global uniqueness, format regex, and immutab
   await assertFails(bobDb.collection("usernames").doc("amina_ng").delete());
   await assertFails(aliceDb.collection("usernames").doc("amina_ng").update({ username: "other" }));
 });
+
 

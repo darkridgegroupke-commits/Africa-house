@@ -460,6 +460,38 @@ class ClockAndIdentityRepository(
         }
     }
 
+    suspend fun syncEmailVerificationStatus(emailVerified: Boolean): Result<Unit> {
+        return try {
+            val uid = requireUid()
+            val userRef = db.collection("users").document(uid)
+            val secRef = userRef.collection("privacy_security").document("settings")
+            db.runBatch { batch ->
+                batch.update(
+                    userRef,
+                    mapOf(
+                        "emailVerified" to emailVerified,
+                        "updatedAt" to FieldValue.serverTimestamp(),
+                    ),
+                )
+                batch.set(
+                    secRef,
+                    mapOf(
+                        "ownerUid" to uid,
+                        "emailVerified" to emailVerified,
+                        "updatedAt" to FieldValue.serverTimestamp(),
+                    ),
+                    com.google.firebase.firestore.SetOptions.merge(),
+                )
+            }.await()
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, "users")
+            Result.failure(e)
+        }
+    }
+
     suspend fun createCharacter(
         fullName: String,
         genderPresentation: String,

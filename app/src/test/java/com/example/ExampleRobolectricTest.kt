@@ -365,4 +365,48 @@ class ExampleRobolectricTest {
         composeRule.onNodeWithTag("settings_section_privacy").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("settings_section_alt").performScrollTo().assertIsDisplayed()
     }
+
+    @Test
+    fun verify_register_screen_username_uniqueness_and_email_verification_gate() {
+        var verificationEmailTriggered = false
+        var refreshTriggered = false
+        var registrationSubmitted = false
+
+        composeRule.setContent {
+            HouseOfAfricaTheme {
+                com.example.ui.screens.RegistrationScreen(
+                    isSignedIn = true,
+                    initialEmail = "amina@hoa.africa",
+                    initialDisplayName = "Amina Okonkwo",
+                    emailVerified = false,
+                    pendingDraft = com.example.ui.state.PendingRegistrationDraft(
+                        username = "amina_lagos",
+                        acceptedTerms = true,
+                    ),
+                    usernameAvailability = "amina_lagos" to true,
+                    onSendVerificationEmail = { verificationEmailTriggered = true },
+                    onRefreshEmailVerification = { refreshTriggered = true },
+                    onCompleteRegistration = { _, _, _, _ -> registrationSubmitted = true },
+                )
+            }
+        }
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("registration_screen_root").assertIsDisplayed()
+        composeRule.onNodeWithTag("register_email_verification_card").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("@amina_lagos is available!").assertIsDisplayed()
+        composeRule.onNodeWithTag("register_security_policy_card").performScrollTo().assertIsDisplayed()
+
+        // Verify email link & refresh triggers work
+        composeRule.onNodeWithTag("register_send_verification_button").performScrollTo().performClick()
+        composeRule.onNodeWithTag("register_refresh_verification_button").performScrollTo().performClick()
+        assertTrue(verificationEmailTriggered)
+        assertTrue(refreshTriggered)
+
+        // Unverified signed-in user is blocked from reserving until email verification passes
+        composeRule.onNodeWithTag("register_submit_button").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("register_error_banner").performScrollTo().assertIsDisplayed()
+        assertTrue(!registrationSubmitted)
+    }
 }

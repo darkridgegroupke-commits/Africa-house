@@ -25,6 +25,7 @@ interface SimulationActions {
         emailVerified: Boolean,
         onSuccess: () -> Unit = {},
     )
+    fun syncEmailVerification(emailVerified: Boolean)
     fun createCharacter(
         fullName: String,
         gender: String,
@@ -124,6 +125,9 @@ fun SimulationViewModel.asActions(): SimulationActions = object : SimulationActi
     override fun checkUsernameAvailability(rawUsername: String) = this@asActions.checkUsernameAvailability(rawUsername)
     override fun completeAccountRegistration(username: String, email: String, displayName: String, emailVerified: Boolean, onSuccess: () -> Unit) {
         this@asActions.completeAccountRegistration(username, email, displayName, emailVerified, onSuccess)
+    }
+    override fun syncEmailVerification(emailVerified: Boolean) {
+        this@asActions.syncEmailVerification(emailVerified)
     }
     override fun createCharacter(fullName: String, gender: String, countryId: Long, stateId: Long, countyId: Long, occupation: String, biography: String, avatarStyle: String, avatarAccentIndex: Int, asAlt: Boolean) {
         this@asActions.createCharacter(fullName, gender, countryId, stateId, countyId, occupation, biography, avatarStyle, avatarAccentIndex, asAlt)

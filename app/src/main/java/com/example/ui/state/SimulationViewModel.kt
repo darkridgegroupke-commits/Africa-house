@@ -339,6 +339,10 @@ class SimulationViewModel(
         )
     }
 
+    fun syncEmailVerification(emailVerified: Boolean) = viewModelScope.launch {
+        clockIdentityRepo.syncEmailVerificationStatus(emailVerified)
+    }
+
     fun createCharacter(
         fullName: String,
         gender: String,

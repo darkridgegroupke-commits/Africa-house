@@ -86,6 +86,14 @@ data class PublicVisibilitySettings(
     val publicProfileSearchable: Boolean = true,
 )
 
+data class PendingRegistrationDraft(
+    val username: String = "",
+    val email: String = "",
+    val displayName: String = "",
+    val acceptedTerms: Boolean = false,
+    val autoSubmitAfterSignIn: Boolean = false,
+)
+
 data class HoaShellUiState(
     val themePreference: ThemePreference = ThemePreference.SYSTEM,
     val selectedProfileSection: ProfileSectionTab = ProfileSectionTab.OVERVIEW,
@@ -93,6 +101,7 @@ data class HoaShellUiState(
     val selectedBankCategory: BankAccountCategory = BankAccountCategory.PERSONAL,
     val selectedNotificationFilter: String = "All",
     val visibilitySettings: PublicVisibilitySettings = PublicVisibilitySettings(),
+    val pendingRegistration: PendingRegistrationDraft = PendingRegistrationDraft(),
     val roadmapPhases: List<RoadmapPhase> = defaultRoadmapPhases(),
 )
 
@@ -147,6 +156,14 @@ class HoaShellViewModel : ViewModel() {
 
     fun updateVisibilitySettings(transform: (PublicVisibilitySettings) -> PublicVisibilitySettings) {
         _uiState.update { it.copy(visibilitySettings = transform(it.visibilitySettings)) }
+    }
+
+    fun updatePendingRegistration(transform: (PendingRegistrationDraft) -> PendingRegistrationDraft) {
+        _uiState.update { it.copy(pendingRegistration = transform(it.pendingRegistration)) }
+    }
+
+    fun clearPendingRegistration() {
+        _uiState.update { it.copy(pendingRegistration = PendingRegistrationDraft()) }
     }
 }
 

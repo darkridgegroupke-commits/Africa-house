@@ -19,8 +19,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,12 +51,15 @@ import com.example.ui.HoaAppShell
 import com.example.ui.WorldShellBindings
 import com.example.ui.auth.AuthScreen
 import com.example.ui.auth.authStateFlow
+import com.example.ui.auth.reloadCurrentUserEmailVerified
+import com.example.ui.auth.sendCurrentUserEmailVerification
 import com.example.ui.auth.signOutFromHouseOfAfrica
 import com.example.ui.screens.CharacterCreationWizardScreen
 import com.example.ui.screens.LandingScreen
 import com.example.ui.screens.PublicCountryPreviewScreen
 import com.example.ui.screens.RegistrationScreen
 import com.example.ui.state.HoaShellViewModel
+import com.example.ui.state.PendingRegistrationDraft
 import com.example.ui.state.SimulationShellBindings
 import com.example.ui.state.SimulationViewModel
 import com.example.ui.state.UiState
@@ -64,6 +69,7 @@ import com.example.ui.theme.HouseOfAfricaTheme
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,15 +94,19 @@ private fun AppNavigation(shellViewModel: HoaShellViewModel) {
     val user = currentUser
 
     if (user == null) {
-        PublicUnauthenticatedFlow()
+        PublicUnauthenticatedFlow(
+            pendingDraft = shellUiState.pendingRegistration,
+            onDraftChange = { draft -> shellViewModel.updatePendingRegistration { draft } },
+        )
     } else {
         val uid = user.uid
         val displayName = user.displayName ?: "African Citizen"
         val userEmail = user.email.orEmpty()
-        val isEmailVerified = user.isEmailVerified
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
         val credentialManager = remember(context) { CredentialManager.create(context) }
+        var verifiedEmailState by remember(uid) { mutableStateOf(user.isEmailVerified) }
+        var authFeedbackMessage by remember(uid) { mutableStateOf<com.example.ui.state.ActionFeedback?>(null) }
 
         key(uid) {
             val worldViewModel: WorldGeographyViewModel = viewModel(
@@ -179,19 +189,67 @@ private fun AppNavigation(shellViewModel: HoaShellViewModel) {
                                 isSignedIn = true,
                                 initialEmail = userEmail,
                                 initialDisplayName = displayName,
-                                emailVerified = isEmailVerified,
+                                emailVerified = verifiedEmailState,
+                                pendingDraft = shellUiState.pendingRegistration,
                                 usernameAvailability = usernameAvailability,
-                                feedback = simFeedback,
+                                feedback = authFeedbackMessage ?: simFeedback,
+                                onDraftChange = { draft -> shellViewModel.updatePendingRegistration { draft } },
                                 onCheckUsernameAvailability = simActions::checkUsernameAvailability,
+                                onSendVerificationEmail = {
+                                    scope.launch {
+                                        authFeedbackMessage = com.example.ui.state.ActionFeedback(isBusy = true, message = "Sending verification email...")
+                                        sendCurrentUserEmailVerification().fold(
+                                            onSuccess = {
+                                                authFeedbackMessage = com.example.ui.state.ActionFeedback(
+                                                    isBusy = false,
+                                                    message = "Verification email sent to $userEmail. Check your inbox then tap Refresh.",
+                                                )
+                                            },
+                                            onFailure = { err ->
+                                                authFeedbackMessage = com.example.ui.state.ActionFeedback(
+                                                    isBusy = false,
+                                                    message = err.localizedMessage ?: "Unable to send verification email.",
+                                                    isError = true,
+                                                )
+                                            },
+                                        )
+                                    }
+                                },
+                                onRefreshEmailVerification = {
+                                    scope.launch {
+                                        authFeedbackMessage = com.example.ui.state.ActionFeedback(isBusy = true, message = "Refreshing verification status...")
+                                        reloadCurrentUserEmailVerified().fold(
+                                            onSuccess = { verified ->
+                                                verifiedEmailState = verified
+                                                simActions.syncEmailVerification(verified)
+                                                authFeedbackMessage = com.example.ui.state.ActionFeedback(
+                                                    isBusy = false,
+                                                    message = if (verified) "Email verified via Firebase Authentication!" else "Still pending verification. Open the link in your email first.",
+                                                    isError = !verified,
+                                                )
+                                            },
+                                            onFailure = { err ->
+                                                authFeedbackMessage = com.example.ui.state.ActionFeedback(
+                                                    isBusy = false,
+                                                    message = err.localizedMessage ?: "Refresh failed.",
+                                                    isError = true,
+                                                )
+                                            },
+                                        )
+                                    }
+                                },
                                 onCompleteRegistration = { username, email, name, verified ->
+                                    authFeedbackMessage = null
                                     simActions.completeAccountRegistration(
                                         username = username,
                                         email = email,
                                         displayName = name,
                                         emailVerified = verified,
+                                        onSuccess = { shellViewModel.clearPendingRegistration() },
                                     )
                                 },
                                 onBackToLanding = {
+                                    shellViewModel.clearPendingRegistration()
                                     signOutFromHouseOfAfrica(credentialManager = credentialManager, scope = scope)
                                 },
                             )
@@ -226,6 +284,7 @@ private fun AppNavigation(shellViewModel: HoaShellViewModel) {
                                     onSettleOrRelocate = worldViewModel::settleOrRelocate,
                                     onRetryBootstrap = { worldViewModel.retryBootstrap(displayName) },
                                     onSignOut = {
+                                        shellViewModel.clearPendingRegistration()
                                         signOutFromHouseOfAfrica(
                                             credentialManager = credentialManager,
                                             scope = scope,
@@ -249,7 +308,10 @@ private fun AppNavigation(shellViewModel: HoaShellViewModel) {
 }
 
 @Composable
-private fun PublicUnauthenticatedFlow() {
+private fun PublicUnauthenticatedFlow(
+    pendingDraft: PendingRegistrationDraft,
+    onDraftChange: (PendingRegistrationDraft) -> Unit,
+) {
     val navController = rememberNavController()
     NavHost(
         navController = navController,
@@ -272,6 +334,8 @@ private fun PublicUnauthenticatedFlow() {
         composable("register") {
             RegistrationScreen(
                 isSignedIn = false,
+                pendingDraft = pendingDraft,
+                onDraftChange = onDraftChange,
                 onBackToLanding = { navController.popBackStack() },
                 onGoToLogin = { navController.navigate("login") },
             )
