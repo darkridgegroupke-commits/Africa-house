@@ -1,0 +1,6 @@
+{
+  "name": "House of Africa",
+  "description": "Persistent multiplayer economic, political, business, and governance simulation across African countries, states, and counties.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">House of Africa</string>
+    <string name="cd_app_emblem">House of Africa sovereign emblem</string>
+    <string name="cd_hero_banner">Pan-African parliamentary dome and trade harbor</string>
+    <string name="cd_open_menu">Open navigation menu</string>
+    <string name="cd_notifications">Notifications</string>
+    <string name="cd_profile">Citizen profile</string>
+</resources>
